@@ -1,10 +1,12 @@
-
+import io
 import re
+from enum import Enum
 from types import SimpleNamespace
 
-from typing import Any, Union, Callable, TypeVar, Generic, Tuple, List, Iterable
+from typing import Union, Callable, Tuple, List, Iterable, overload, Type
 
-T = TypeVar('T', bound='Tag')
+
+AUTO_TAG_NAME = object()
 
 
 class VarRef:
@@ -14,34 +16,59 @@ class VarRef:
         self.var_name = var_name
 
 
-class RenderContext:
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self.extra = {}
+class RenderedTag(SimpleNamespace):
+    tag_class: Type['Tag']
+    attrs: dict
 
-    def extended(self, ctx) -> 'RenderContext':
-        cpy = self.__class__({**self.ctx, **ctx})
-        cpy.extra = {**self.extra}
-        return cpy
+    @property
+    def tag_name(self):
+        name = self.tag_class.tag_name
+        if name and isinstance(name, str):
+            return name
+
+        class_name = self.tag_class.__name__
+        if name is AUTO_TAG_NAME:
+            class_name = class_name.lower()
+        return class_name
+
+    @property
+    def is_body_allowed(self):
+        return self.tag_class.is_body_allowed
+
+    @property
+    def is_meta_tag(self):
+        return self.tag_class.is_meta_tag
 
 
 class Tag:
 
-    tag_name: str = None
+    tag_name: Union[str, object] = AUTO_TAG_NAME
 
     is_body_allowed = True  # no body - no closing tag
     is_meta_tag = False  # if True expose only body, e.g. Text, Template, MyComponent, Slot
-    is_proto = True  # i.e. it is not copy for render
 
     # instance attributes
     attrs: dict[str, Union[str, int, bool, Callable, VarRef]]
-    body: list  # produced when rendering
     for_loop: tuple  # (var_names, iterable_factory)
     if_cond: tuple   # (kword:['If' | 'Elif' | 'Else'] , value:[callable | VarRef | castable to bool])
 
+    @overload
+    def __init__(
+        self, *,
+        For=None, If=None, Elif=None, Else=None,
+        Class=None, xClass=None,
+        Style=None, xStyle=None,
+        **attrs
+    ):
+        ...
+
     def __init__(self, **attrs):
-        self.attrs, self.for_loop, self.if_cond = self._process_attrs(**attrs)
-        self.body = None
+        """
+        xClass, xStyle mean eXtend Class or Style
+        They have special meaning if only they are dicts or lists/tuples,
+        in other cases it will be treat as regular attrs.
+        """
+        self.attrs, self.for_loop, self.if_cond = self._process_attrs(attrs)
 
     @staticmethod
     def _compile_for(s: str):
@@ -57,8 +84,39 @@ class Tag:
         lst_src = f'[{var_names_s} for {s}]'
         return tuple(var_names), compile(lst_src, '<string>', 'eval')
 
-    def _process_attrs(self, **attrs):
+    @staticmethod
+    def _make_value_render(v, force_eval=False):
+        if force_eval:
+            if isinstance(v, str):
+                code_obj = compile(v, '<string>', 'eval')
 
+                def render(ctx: dict):
+                    return eval(code_obj, None, ctx)
+                return render
+            return v
+
+        render = v
+        if isinstance(v, bytes):
+            render = v.decode()
+        elif isinstance(v, str):
+            def render(ctx: dict):
+                return v.format_map(ctx)
+        elif isinstance(v, VarRef):
+            var_name = v.var_name
+
+            def render(ctx: dict):
+                return ctx.get(var_name)
+        elif isinstance(v, set):
+            assert len(v) == 1
+            v = [*v][0]
+            code_obj = compile(v, '<string>', 'eval')
+
+            def render(ctx: dict):
+                return eval(code_obj, None, ctx)
+
+        return render
+
+    def _process_attrs(self, attrs: dict):
         for_loop = attrs.pop('For', None)
         if for_loop is not None:
             for_loop = self._compile_for(for_loop)
@@ -68,61 +126,334 @@ class Tag:
             v = attrs.pop(kword, None)
             if v is not None:
                 if kword != 'Else' and isinstance(v, str) and v:
-                    code_obj = compile(v, '<string>', 'eval')
-                    v = lambda ctx: eval(code_obj, None, ctx)
+                    v = self._make_value_render(v, force_eval=True)
                 if_cond = (kword, v)
                 break
+
         for k, v in attrs.items():
-            if isinstance(v, set):
-                assert len(v) == 1
-                v = [*v][0]
-                code_obj = compile(v, '<string>', 'eval')
-                attrs[k] = lambda ctx: eval(code_obj, None, ctx)
+            if isinstance(v, dict):
+                dct = {**v}
+                for dk, dv in dct.items():
+                    if isinstance(dv, bytes):
+                        dct[dk] = dv.decode()
+                    else:
+                        dct[dk] = self._make_value_render(dv)
+                attrs[k] = dct
+            else:
+                attrs[k] = self._make_value_render(v)
         return attrs, for_loop, if_cond
 
-    def clone(self: T) -> T:
-        cpy = self.__class__()
-        cpy.attrs = {**self.attrs}
-        cpy.body = self.body
-        cpy.for_loop = self.for_loop
-        cpy.if_cond = self.if_cond
-        cpy.is_proto = False
-        return cpy
+    @classmethod
+    def _render_value(cls, attr_value, ctx: dict):
+        if callable(attr_value):
+            attr_value = attr_value(ctx)
+        return attr_value
 
-    @staticmethod
-    def _render_attr(attr_value, ctx: dict):
-        v = attr_value
-        if isinstance(v, str):
-            v = v.format(**ctx)
-        elif callable(v):
-            v = v(ctx)
-        elif isinstance(v, VarRef):
-            v = ctx.get(v.var_name)
-        return v
+    @classmethod
+    def _class_render(cls, name, raw_enabled, ctx):
+        if cls._render_value(raw_enabled, ctx):
+            return name
 
-    def _render_attrs(self, ctx: dict):
-        assert not self.is_proto
-        attrs = self.attrs
+    @classmethod
+    def _style_render(cls, k, raw_v, ctx):
+        v = cls._render_value(raw_v, ctx)
+        if not v:
+            return
+        return f'{k}:{v}'
+
+    @classmethod
+    def _render_attrs(cls, attrs: dict, ctx: dict):
+        ret = {}
         for a, v in attrs.items():
-            attrs[a] = self._render_attr(v, ctx)
+            ret[a] = cls._render_value(v, ctx)
+        args = [
+            ('Class', 'exClass', ' ', cls._class_render),
+            ('Style', 'exStyle', ';', cls._style_render)
+        ]
+        for a, exa, sep, item_render in args:
+            merged = cls._render_merge_special_attrs(ret, a, exa, sep=sep, item_render=item_render, ctx=ctx)
+            ret.pop(a, None)
+            ret.pop(exa, None)
+            if merged:
+                ret[a.lower()] = merged
+        return ret
 
-    def _resolve_cond(self, ctx):
+    @classmethod
+    def _render_merge_special_attrs(
+            cls, attrs: dict, attr_name, extra_name,
+            *, sep: str, ctx: dict, item_render
+    ):
+        attr = attrs.get(attr_name)
+        extra = attrs.get(extra_name, None)
+        if extra is not None and attr is None:
+            attr = extra
+            extra = None
+
+        if isinstance(attr, dict):
+            if isinstance(extra, dict):
+                attr.update(extra)
+                extra = None
+            rendered = [item_render(k, v, ctx) for k, v in attr.items()]
+            attr = sep.join([v for v in rendered if v])
+        if extra:
+            if isinstance(extra, dict):
+                rendered = [item_render(k, v, ctx) for k, v in extra.items()]
+                extra = sep.join([v for v in rendered if v])
+            if extra:
+                attr = f'{attr}{sep}{extra}'
+        return attr
+
+    def resolve_cond(self, ctx):
         if self.if_cond is None:
             return
-
         kword, v = self.if_cond
-        if callable(v):
-            v = v(ctx)
-        elif isinstance(v, VarRef):
-            v = ctx.get(v.var_name)
-        return (kword, v)
+        return (kword, self._render_value(v, ctx))
 
-    def _iter_body(self, body: dict['Tag', dict], ctx: dict) -> Iterable[Tuple[dict, 'Tag', dict]]:
+    def render_self(self, ctx):
+        ret = RenderedTag(
+            tag_class=self.__class__,
+            attrs=self._render_attrs(self.attrs, ctx),
+        )
+        return ret
+
+    def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
+        # extend context with props
+        self_ctx = {**u.global_ctx, **ctx}
+        self_rendered = self.render_self(self_ctx)
+        yield self_rendered
+        if not body:
+            return
+        if not isinstance(body, dict):
+            # TODO cache
+            code = u.compile_template(body)
+            yield eval(code, None, self_ctx)
+            return
+
+        yield u.START_BODY
+        for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
+            ch_ctx = ctx if loop_vars is None else {**ctx, **loop_vars}
+            yield from ch.render(u, ch_ctx, ch_body)
+        yield u.END_BODY
+
+    def __repr__(self):
+        nm = self.tag_name or self.__class__.__name__
+        return f'<{nm}({str(self.attrs)})>'
+
+
+class MetaTag(Tag):
+    tag_name = None
+    is_meta_tag = True
+
+
+class Slot(MetaTag):
+
+    @overload
+    def __init__(
+        self, *,
+        SlotName='default',
+        For=None, If=None, Elif=None, Else=None,
+        **attrs
+    ):
+        ...
+
+    def __init__(self, SlotName='default', **attrs):
+        attrs.setdefault('SlotName', SlotName)
+        super().__init__(**attrs)
+
+    @property
+    def SlotName(self):
+        return self.attrs['SlotName']
+
+    def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
+        self_ctx = {**u.global_ctx, **ctx}
+        slots_content_map: dict
+        slots_content_map = u.pop_scope()
+        slot_name = self._render_value(self.SlotName, self_ctx)
+        to_slot: Tuple[dict, Tag, dict]
+        to_slot = slots_content_map.get(slot_name)
+        if to_slot is None:
+            # render as regular tag (slot default content)
+            yield from super().render(u, ctx, body)
+            u.push_scope(slots_content_map)
+            return
+
+        del body
+        stempl_ctx, stempl, stempl_body = to_slot
+        self_rendered = self.render_self(self_ctx)
+        yield self_rendered
+
+        # inject slot props
+        stempl: SlotTemplate
+        sprops_name = stempl.render_special('SlotProps', u, ctx)
+        if sprops_name:
+            stempl_ctx = {**stempl_ctx, **{sprops_name: self_rendered.attrs}}
+
+        yield u.START_BODY
+        yield from stempl.render(u, stempl_ctx, stempl_body)
+        yield u.END_BODY
+        u.push_scope(slots_content_map)
+
+
+class SlotTemplate(MetaTag):
+
+    Slot: Union[str, Callable]
+    SlotProps: Union[str, Callable, None]
+    special_attrs = {'Slot', 'SlotProps'}
+
+    def _process_attrs(self, attrs: dict):
+        attrs, *extra = super()._process_attrs(attrs)
+        self.Slot = attrs.pop('Slot', 'default')
+        self.SlotProps = attrs.pop('SlotProps', None)
+        return attrs, *extra
+
+    def render_special(self, spec_attr: str, u: 'UPYTL', ctx: dict):
+        assert spec_attr in self.special_attrs
+        v = getattr(self, spec_attr)
+        if callable(v):
+            return self._render_value(v, {**u.global_ctx, **ctx})
+        return v
+
+
+class Component(MetaTag):
+
+    template: Union[str, dict]
+
+    # instance attrs
+    props: Union[list, dict]
+    has_root: bool
+
+    @overload
+    def __init__(
+        self, *,
+        For=None, If=None, Elif=None, Else=None,
+        Class=None, xClass=None,
+        Style=None, xStyle=None,
+        **attrs
+    ):
+        ...
+
+    def __init__(self, **attrs):
+        super().__init__(**attrs)
+        self.slots = set()
+        # if we have root - pass down attrs
+        self.has_root = (
+            isinstance(self.template, dict)
+            and len(self.template) == 1
+            and not isinstance([*self.template][0], Slot)
+        )
+
+    def _process_attrs(self, attrs: dict):
+        if isinstance(self.props, list):
+            props = dict.fromkeys(self.props)
+        else:
+            props = {**self.props}
+        for k in [*attrs]:
+            if k in self.props:
+                props[k] = attrs.pop(k)
+        props, *_ = super()._process_attrs(props)
+        self.props = props
+        return super()._process_attrs(attrs)
+
+    def _render_props(self, ctx: dict):
+        render_prop = self._render_value
+        return {k: render_prop(v, ctx) for k, v in self.props.items()}
+
+    def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
+        slots_content: dict[SlotTemplate, dict] = body
+        # save parent cxt as slots content should be rendered in it, not in component context
+        out_ctx = ctx
+        # component template context is defined by only component's props
+        props_rendered = self._render_props({**u.global_ctx, **ctx})
+        self_ctx = {**u.global_ctx, **ctx, **props_rendered}
+        # yeild tag/attrs
+        self_rendered = self.render_self(self_ctx)
+        yield self_rendered
+        yield u.START_BODY
+        # resolve for-loop/if-else
+        slots_content_map = {}
+        if slots_content:
+            for st, st_body, loop_vars in u.iter_body(slots_content, {**u.global_ctx, **out_ctx}):
+                st: SlotTemplate
+                st_ctx = out_ctx if loop_vars is None else {**out_ctx, **loop_vars}
+                slots_content_map[st.render_special('Slot', u, st_ctx)] = (st_ctx, st, st_body)
+        u.push_scope(slots_content_map)
+        is_first = True
+        for ch, ch_body, loop_vars in u.iter_body(self.template, {**u.global_ctx, **props_rendered}):
+            ch_ctx = (
+                props_rendered if loop_vars is None
+                else {**props_rendered, **loop_vars}
+            )
+            gen = ch.render(u, ch_ctx, ch_body)
+            if is_first and self.has_root:
+                it = next(gen, None)
+                if not issubclass(it.tag_class, Slot):
+                    # pass down attrs
+                    it.attrs.update(self_rendered.attrs)
+                yield it
+            yield from gen
+
+        yield u.END_BODY
+        u.pop_scope()
+
+
+class Punc(Enum):
+    START = 'start'
+    END = 'end'
+
+
+
+
+class UPYTL:
+    START_BODY = Punc.START
+    END_BODY = Punc.END
+
+    compiled_templates_cache = {}
+
+    def __init__(self, *, global_ctx: dict = None, default_ctx: dict = None):
+        self.global_ctx = global_ctx or {}
+        self.default_ctx = default_ctx or {}
+        self.scope = None
+
+    @classmethod
+    def compile_template(cls, body: str, delimiters: List[str] = None):
+        if delimiters is None:
+            delimiters = ['[[', ']]']
+
+        cache_key = (tuple(delimiters), body)
+        ret = cls.compiled_templates_cache.get(cache_key)
+        if ret is not None:
+            return ret
+
+        dleft, dright = delimiters
+        dleft, dright = [re.escape(d) for d in [dleft, dright]]
+        split_re = re.compile(f'({dleft}.*?{dright})')
+        body_split = split_re.split(body)
+
+        iter_body = iter(body_split)
+        fstr = []
+        while True:
+            s = next(iter_body, None)
+            if s:
+                s = s.replace('{', '{{').replace('}', '}}')
+                fstr.append(s)
+            code = next(iter_body, None)
+            if code is None:
+                break
+            # remove delimiters [2:-2]
+            fstr.append(f'{{ {code[2:-2]} }}')
+        fstr = ''.join(fstr)
+        fstr = f"f'''{fstr}'''"
+        ret = compile(fstr, '<string>', 'eval')
+        cls.compiled_templates_cache[cache_key] = ret
+        return ret
+
+    @classmethod
+    def iter_body(cls, body: dict[Tag, dict], ctx: dict) -> Iterable[Tuple[Tag, dict, dict]]:
         in_if_block = False
         skip_rest = None
         for tag, tag_body in body.items():
             collect = False
-            cond = tag._resolve_cond(ctx)
+            cond = tag.resolve_cond(ctx)
             if cond is None:
                 collect = True
                 in_if_block = False
@@ -148,164 +479,126 @@ class Tag:
                         collect = True
             if collect:
                 if tag.for_loop is not None:
-                    for item_ctx in tag._iter_for_loop_context(ctx):
-                        yield (item_ctx, tag, tag_body)
+                    for loop_vars in cls._iter_for_loop(tag.for_loop, ctx):
+                        yield (tag, tag_body, loop_vars)
                 else:
-                    yield (ctx, tag, tag_body)
+                    yield (tag, tag_body, None)
 
-    def _iter_for_loop_context(self, ctx) -> dict:
-        var_names, code_obj = self.for_loop
+    @classmethod
+    def _iter_for_loop(cls, for_loop: Tuple, ctx) -> dict:
+        var_names, code_obj = for_loop
         lst = eval(code_obj, None, ctx)
         for var_values in lst:
             if not isinstance(var_values, tuple):
                 var_values = [var_values]
-            item_ctx = {**ctx, **dict(zip(var_names, var_values))}
-            yield item_ctx
+            yield dict(zip(var_names, var_values))
 
-    def _process_child(self, child_rctx: RenderContext, child: 'Tag', child_body: dict):
-        return child.render(child_rctx, child_body)
+    def push_scope(self, it):
+        self.scope.append(it)
 
-    def _render_body(self, body: Union[str, dict['Tag', dict]], rctx: RenderContext):
-        ret = []
-        for child_ctx, child, child_body in self._iter_body(body, rctx.ctx):
-            child_rctx = rctx.extended(child_ctx)
-            ret.append(self._process_child(child_rctx, child, child_body))
-        return ret
+    def pop_scope(self) -> dict[str, Tuple[dict, Tag, dict[Tag, dict]]]:
+        return self.scope.pop()
 
-    def render(self, rctx: RenderContext, body: dict):
-        me = self.clone()
-        me._render_attrs(rctx.ctx)
-        if isinstance(body, str):
-            if body:
-                #body = compile('f"{body}"', '<string>', 'eval')
-                body = eval(f'f"{body}"', None, rctx.ctx)
-                #body = body.format(**rctx.ctx)
-        elif body is not None:
-            body = self._render_body(body, rctx)
-        me.body = body
-        return me
-
-    def __repr__(self):
-        return f'<{self.tag_name}({str(self.attrs)})>'
+    def render(self, template: dict[Tag, dict], ctx, *, indent=2, debug=False, doctype='html'):
+        ctx = {**self.default_ctx, **ctx}
+        self.scope = []
+        out = HTMLPrinter(indent, debug, doctype)
+        for k, v in template.items():
+            for it in k.render(self, ctx, v):
+                if it is self.START_BODY:
+                    out.start_body()
+                elif it is self.END_BODY:
+                    out.end_body()
+                else:
+                    out.print(it)
+        return out.buf.getvalue()
 
 
-class Slot(Tag):
+class HTMLPrinter:
 
-    tag_name = 'Slot'
+    def __init__(self, indent=0, debug=False, doctype='html'):
+        self.indent = ' ' * indent
+        self.cur_indent = ''
+        self.debug = debug
+        self.buf = io.StringIO()
+        if doctype:
+            self.buf.write(f'<!DOCTYPE {doctype}>')
 
-    is_meta_tag = True
+        self.prev_tag = None
+        self.stack = []
 
-    parent: 'Component'
+    def indent_inc(self):
+        if self.indent:
+            self.cur_indent = f'{self.indent}{self.cur_indent}'
 
-    def __init__(self, name='default', **attrs):
-        attrs.setdefault('name', name)
-        super().__init__(**attrs)
-        self.parent = None
+    def indent_dec(self):
+        step = len(self.indent)
+        if step:
+            self.cur_indent = self.cur_indent[:-step]
 
-    @property
-    def name(self):
-        return self.attrs['name']
+    def start_body(self):
+        assert isinstance(self.prev_tag, RenderedTag)
+        self.stack.append(Punc.START)
+        if self.debug or not self.prev_tag.tag_class.is_meta_tag:
+            self.indent_inc()
 
-    def clone(self) -> 'Slot':
-        cpy = super().clone()
-        cpy.parent = self.parent
-        return cpy
+    def end_body(self):
+        # it can be prev close-tag
+        it = self.stack.pop()
+        if isinstance(it, str):
+            self._print(it)
+            it = self.stack.pop()
+        assert it is Punc.START
+        close_tag = self.stack.pop()
+        if close_tag:
+            self.indent_dec()
+            self._print_with_indent(close_tag)
 
-    def render(self, rctx: RenderContext, body: Union[str, dict[T, dict]]):
-        assert self in self.parent.slots
-        parent_data = rctx.extra[self.parent]
-        slot_name = self._render_attr(self.name, rctx.ctx)
-        slot_bus: dict[str, Tuple[RenderContext, SlotTemplate, dict]] = parent_data.slot_bus
-        stempl_rctx, stempl, stempl_body = slot_bus.get(slot_name, (None, None, None))
-        if stempl is None:
-            return super().render(rctx, body)
+    def _print(self, s):
+        if s:
+            self.buf.write(s)
+
+    def _print_with_indent(self, s: str):
+        if not s:
+            return
+        if self.indent:
+            s = f'\n{self.cur_indent}{s}'
+        self._print(s)
+
+    def print(self, it: Union[RenderedTag, str]):
+        if isinstance(it, str):
+            # this is text-body
+            self.start_body()
+            self._print_with_indent(it)
+            self.end_body()
         else:
-            sprops = {}
-            if 'SlotProps' in stempl.attrs:
-                sprops_name = stempl.attrs['SlotProps']
-                sprops = {sprops_name: self.attrs}
-            stempl_rctx = stempl_rctx.extended(sprops)
-            return stempl.render(stempl_rctx, stempl_body)
+            close_tag = self.stack and self.stack[-1]
+            if isinstance(close_tag, str):
+                self.stack.pop()
+                self._print(close_tag)
+            if not self.debug and it.tag_class.is_meta_tag:
+                tag_def = None
+                close_tag = ''
+            else:
+                tag_name = it.tag_name
+                attrs = ' '.join([
+                    f'''{aname}{'' if v is True else f'="{str(v)}"' }'''
+                    for aname, v in it.attrs.items() if v is not False
+                ])
+                sep = ' ' if attrs else ''
+                end_tag_def, close_tag = ['', f'</{tag_name}>'] if it.is_body_allowed else [' /', '']
+                tag_def = f'<{tag_name}{sep}{attrs}{end_tag_def}>'
+            self._print_with_indent(tag_def)
+            self.stack.append(close_tag)
+        self.prev_tag = it
 
 
-class SlotTemplate(Tag):
-    is_meta_tag = True
+class UHelper:
+    def __getattr__(self, name):
+        return VarRef(name)
 
-    @property
-    def name(self):
-        return self.attrs.get('name', 'default')
+    def __truediv__(self, s: str):
+        return s.encode()
 
-
-class Component(Tag):
-
-    _ownbody: Union[str, dict]
-
-    is_meta_tag = True
-
-    props: Union[list, dict]
-    slots: set
-
-    def __init__(self, **attrs):
-        super().__init__(**attrs)
-        self.slots = set()
-        self._ownbody = self._clone_body(self._ownbody)
-
-
-    def _clone_body(self, src):
-        if not isinstance(src, dict):
-            return src
-        cpy = {}
-        for t, v in src.items():
-            if isinstance(t, Slot):
-                t = t.clone()
-                t.parent = self
-                self.slots.add(t)
-            elif isinstance(t, Component):
-                t = t.clone()
-                t.slots.clear()
-                t._ownbody = t._clone_body(t._ownbody)
-            cpy[t] = self._clone_body(v)
-        return cpy
-
-    def _process_attrs(self, **attrs):
-        if isinstance(self.props, list):
-            props = dict.fromkeys(self.props)
-        else:
-            props = {**self.props}
-        for k in [*attrs]:
-            if k in self.props:
-                props[k] = attrs.pop(k)
-        self.props = props
-        return super()._process_attrs(**attrs)
-
-    def clone(self) -> 'Component':
-        cpy = super().clone()
-        cpy.props = self.props
-        cpy.slots = self.slots
-        cpy._ownbody = self._ownbody
-        return cpy
-
-    def _render_props(self, ctx: dict):
-        render_prop = self._render_attr
-        return {k: render_prop(v, ctx) for k, v in self.props.items()}
-
-    def render(self, rctx: RenderContext, body: Union[str, dict['Tag', dict]]):
-        assert self not in rctx.extra
-        rctx = rctx.extended(self._render_props(rctx.ctx))
-        if body and (isinstance(body, str) or not isinstance([*body][0], SlotTemplate)):
-            body = {SlotTemplate(): body}
-
-        # the body is the set of templates for slots
-        slot_bus = {}
-        if isinstance(body, dict):
-            for t_ctx, t, t_body in self._iter_body(body, rctx.ctx):
-                t_rctx = rctx.extended(t_ctx)
-                t: SlotTemplate = t
-                slot_bus[t.name] = (t_rctx, t, t_body)
-        data = SimpleNamespace(slot_bus=slot_bus)
-        rctx.extra[self] = data
-        ret = super().render(rctx, self._ownbody)
-        del rctx.extra[self]
-        return ret
-
-Tag(a=1)
+    def __mul__(self, s: str):
+        return {s}
