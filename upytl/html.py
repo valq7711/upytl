@@ -1,9 +1,6 @@
-from .core import Tag, MetaTag
+from .core import Tag, MetaTag, VoidTag
 
 # flake8: noqa E701
-
-class VoidTag(Tag):
-    is_body_allowed = False
 
 
 class Text(MetaTag): ...

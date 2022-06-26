@@ -151,11 +151,13 @@ class Tag:
 
     @classmethod
     def _class_render(cls, name, raw_enabled, ctx):
+        """Render html class of a tag."""
         if cls._render_value(raw_enabled, ctx):
             return name
 
     @classmethod
     def _style_render(cls, k, raw_v, ctx):
+        """Render html style of a tag."""
         v = cls._render_value(raw_v, ctx)
         if not v:
             return
@@ -241,6 +243,10 @@ class Tag:
     def __repr__(self):
         nm = self.tag_name or self.__class__.__name__
         return f'<{nm}({str(self.attrs)})>'
+
+
+class VoidTag(Tag):
+    is_body_allowed = False
 
 
 class MetaTag(Tag):
@@ -399,11 +405,29 @@ class Component(MetaTag):
         u.pop_scope()
 
 
+class GenericComponent(Tag):
+
+    component_factory: Union[str, Type[Tag]]
+
+    def _process_attrs(self, attrs: dict):
+        attrs, *extra = super()._process_attrs(attrs)
+        self.component_factory = attrs.pop('Is')
+        return attrs, *extra
+
+    def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
+        component_factory = self.component_factory
+        if not issubclass(component_factory, Tag):
+            component_factory = self._render_value(self.component_factory, ctx)
+        if isinstance(component_factory, str):
+            component_factory = u.get_component_factory(component_factory)
+        assert issubclass(component_factory, Tag)
+        component = component_factory(**self.attrs)
+        return component.render(u, ctx, body)
+
+
 class Punc(Enum):
     START = 'start'
     END = 'end'
-
-
 
 
 class UPYTL:
@@ -412,10 +436,16 @@ class UPYTL:
 
     compiled_templates_cache = {}
 
+    registered_components: Dict[str, Tag]
+
     def __init__(self, *, global_ctx: dict = None, default_ctx: dict = None):
         self.global_ctx = global_ctx or {}
         self.default_ctx = default_ctx or {}
         self.scope = None
+        self.registered_components = {}
+
+    def get_component_factory(self, name: str) -> Type[Tag]:
+        return self.registered_components[name]
 
     @classmethod
     def compile_template(cls, body: str, delimiters: List[str] = None):

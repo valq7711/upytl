@@ -1,5 +1,5 @@
 from . import html
-from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL
+from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL, GenericComponent
 
 
 __all__ = (
@@ -11,4 +11,5 @@ __all__ = (
     'SlotTemplate',
     'UHelper',
     'UPYTL',
+    'GenericComponent',
 )
