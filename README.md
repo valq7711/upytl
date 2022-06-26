@@ -50,12 +50,7 @@ h.Button(disabled={'not allow_submit'}): 'Submit'
 ```
 
 There are special attributes: `For`, `If`, `Elif`, `Else`, their values are always treated as python expressions except for `Else` (its value is ignored) 
-```python
-t = {
-  h.Div(For='[k in range(5)]'):'This is #[[ k ]] div'
-}
-
-```
+Also note that `For`-syntax is a bit trimmed compared to pure python.
 ```python
 t = {
     h.Div():{
