@@ -421,9 +421,10 @@ class GenericComponent(Tag):
         return attrs, *extra
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
+        self_ctx = {**u.global_ctx, **ctx}
         component_factory = self.component_factory
-        if not issubclass(component_factory, Tag):
-            component_factory = self._render_value(self.component_factory, ctx)
+        if component_factory.__qualname__.startswith(Tag._make_value_render.__qualname__):
+            component_factory = self._render_value(self.component_factory, self_ctx)
         if isinstance(component_factory, str):
             component_factory = u.get_component_factory(component_factory)
         assert issubclass(component_factory, Tag)
