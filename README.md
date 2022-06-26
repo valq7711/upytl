@@ -1,5 +1,5 @@
 # UPYTL
-Ultra Pythonic Template Language
+Ultra Pythonic Template Language (inspired by Vue.js)
 
 ```python
 from upytl import UPYTL, html as h
