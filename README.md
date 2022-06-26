@@ -53,11 +53,9 @@ There are special attributes: `For`, `If`, `Elif`, `Else`, their values are alwa
 Also note that `For`-syntax is a bit trimmed compared to pure python.
 ```python
 t = {
-    h.Div():{
-        h.Template(For='k in range(5)'):{
-            h.Div(If='k != 3'): 'This is #[[ k ]]  div',
-            h.Div(Else=''): 'Here should be div #3',
-        }
+    h.Template(For='k in range(5)'):{
+        h.Div(If='k != 3'): 'This is #[[ k ]]  div',
+        h.Div(Else=''): 'Here should be div #3',
     }
 }
 
