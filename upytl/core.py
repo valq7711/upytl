@@ -3,7 +3,7 @@ import re
 from enum import Enum
 from types import SimpleNamespace
 
-from typing import Union, Callable, Tuple, List, Iterable, overload, Type
+from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict
 
 
 AUTO_TAG_NAME = object()
@@ -48,7 +48,7 @@ class Tag:
     is_meta_tag = False  # if True expose only body, e.g. Text, Template, MyComponent, Slot
 
     # instance attributes
-    attrs: dict[str, Union[str, int, bool, Callable, VarRef]]
+    attrs: Dict[str, Union[str, int, bool, Callable, VarRef]]
     for_loop: tuple  # (var_names, iterable_factory)
     if_cond: tuple   # (kword:['If' | 'Elif' | 'Else'] , value:[callable | VarRef | castable to bool])
 
@@ -359,7 +359,7 @@ class Component(MetaTag):
         return {k: render_prop(v, ctx) for k, v in self.props.items()}
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
-        slots_content: dict[SlotTemplate, dict] = body
+        slots_content: Dict[SlotTemplate, dict] = body
         # save parent cxt as slots content should be rendered in it, not in component context
         out_ctx = ctx
         # component template context is defined by only component's props
@@ -448,7 +448,7 @@ class UPYTL:
         return ret
 
     @classmethod
-    def iter_body(cls, body: dict[Tag, dict], ctx: dict) -> Iterable[Tuple[Tag, dict, dict]]:
+    def iter_body(cls, body: Dict[Tag, dict], ctx: dict) -> Iterable[Tuple[Tag, dict, dict]]:
         in_if_block = False
         skip_rest = None
         for tag, tag_body in body.items():
@@ -496,10 +496,10 @@ class UPYTL:
     def push_scope(self, it):
         self.scope.append(it)
 
-    def pop_scope(self) -> dict[str, Tuple[dict, Tag, dict[Tag, dict]]]:
+    def pop_scope(self) -> Dict[str, Tuple[dict, Tag, Dict[Tag, dict]]]:
         return self.scope.pop()
 
-    def render(self, template: dict[Tag, dict], ctx, *, indent=2, debug=False, doctype='html'):
+    def render(self, template: Dict[Tag, dict], ctx, *, indent=2, debug=False, doctype='html'):
         ctx = {**self.default_ctx, **ctx}
         self.scope = []
         out = HTMLPrinter(indent, debug, doctype)
