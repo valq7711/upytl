@@ -368,7 +368,9 @@ class Component(MetaTag):
         return {k: render_prop(v, ctx) for k, v in self.props.items()}
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
-        slots_content: Dict[SlotTemplate, dict] = body
+        if isinstance(body, str):
+            body = {SlotTemplate(): body}
+        slots_content: Dict[SlotTemplate, Union[str, dict]] = body
         # save parent cxt as slots content should be rendered in it, not in component context
         out_ctx = ctx
         # component template context is defined by only component's props
