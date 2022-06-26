@@ -1,10 +1,9 @@
-from .core import Tag, MetaTag, VoidTag
+from .core import Tag, MetaTag, VoidTag, Template
 
 # flake8: noqa E701
 
 
 class Text(MetaTag): ...
-class Template(MetaTag): ...
 
 
 class Html(Tag): ...

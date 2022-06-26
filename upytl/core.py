@@ -254,6 +254,10 @@ class MetaTag(Tag):
     is_meta_tag = True
 
 
+class Template(MetaTag):
+    pass
+
+
 class Slot(MetaTag):
 
     @overload
@@ -542,6 +546,8 @@ class UPYTL:
         ctx = {**self.default_ctx, **ctx}
         self.scope = []
         out = HTMLPrinter(indent, debug, doctype)
+        # wrap in Template to ensure foo-loop/if-else will be processed properly
+        template = {Template(): template}
         for k, v in template.items():
             for it in k.render(self, ctx, v):
                 if it is self.START_BODY:
