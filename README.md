@@ -1,5 +1,5 @@
 # UPYTL
-Ultra Pythonic Template Language
+Ultra Pythonic Template Language (inspired by Vue.js)
 
 ```python
 from upytl import UPYTL, html as h
@@ -25,6 +25,7 @@ print(rendered)
 - for-loop
 - if-elif-else
 - custom components with slots
+- generic components
 
 ## About
 Default render-behaviour for attributes is `str.format`, so you can
@@ -53,11 +54,9 @@ There are special attributes: `For`, `If`, `Elif`, `Else`, their values are alwa
 Also note that `For`-syntax is a bit trimmed compared to pure python.
 ```python
 t = {
-    h.Div():{
-        h.Template(For='k in range(5)'):{
-            h.Div(If='k != 3'): 'This is #[[ k ]]  div',
-            h.Div(Else=''): 'Here should be div #3',
-        }
+    h.Template(For='k in range(5)'):{
+        h.Div(If='k != 3'): 'This is #[[ k ]]  div',
+        h.Div(Else=''): 'Here should be div #3',
     }
 }
 
