@@ -224,9 +224,12 @@ class Tag:
         if not body:
             return
         if not isinstance(body, dict):
-            # TODO cache
             code = u.compile_template(body)
-            yield eval(code, None, self_ctx)
+            if code is not None:
+                yield eval(code, None, self_ctx)
+            else:
+                # no code found in body
+                yield body
             return
 
         yield u.START_BODY
@@ -428,6 +431,10 @@ class UPYTL:
         dleft, dright = [re.escape(d) for d in [dleft, dright]]
         split_re = re.compile(f'({dleft}.*?{dright})')
         body_split = split_re.split(body)
+        if len(body_split) == 1:
+            # no code
+            cls.compiled_templates_cache[cache_key] = None
+            return None
 
         iter_body = iter(body_split)
         fstr = []
