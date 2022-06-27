@@ -377,9 +377,9 @@ class Component(MetaTag):
         slots_content: Dict[SlotTemplate, Union[str, dict]] = body
         # save parent cxt as slots content should be rendered in it, not in component context
         out_ctx = ctx
-        # component template context is defined by only component's props
-        props_rendered = self._render_props({**u.global_ctx, **ctx})
-        self_ctx = {**u.global_ctx, **ctx, **props_rendered}
+        props_context = {**u.global_ctx, **ctx}
+        props_rendered = self._render_props(props_context)
+        self_ctx = {**props_context, **props_rendered}
         # yeild tag/attrs
         self_rendered = self.render_self(self_ctx)
         yield self_rendered
@@ -393,10 +393,12 @@ class Component(MetaTag):
                 slots_content_map[st.render_special('Slot', u, st_ctx)] = (st_ctx, st, st_body)
         u.push_scope(slots_content_map)
         is_first = True
-        for ch, ch_body, loop_vars in u.iter_body(self.template, {**u.global_ctx, **props_rendered}):
+        # component template context is defined by only component's props
+        template_context = self.get_context(props_rendered)
+        for ch, ch_body, loop_vars in u.iter_body(self.template, {**u.global_ctx, **template_context}):
             ch_ctx = (
-                props_rendered if loop_vars is None
-                else {**props_rendered, **loop_vars}
+                template_context if loop_vars is None
+                else {**template_context, **loop_vars}
             )
             gen = ch.render(u, ch_ctx, ch_body)
             if is_first and self.has_root:
@@ -409,6 +411,14 @@ class Component(MetaTag):
 
         yield u.END_BODY
         u.pop_scope()
+
+    def get_context(self, props_rendered: dict) -> dict:
+        """Return context for own template.
+
+        This method can be overloaded in a derived class
+        to extend the context of own template.
+        """
+        return props_rendered
 
 
 class GenericComponent(Tag):
