@@ -58,6 +58,7 @@ class Tag:
         For=None, If=None, Elif=None, Else=None,
         Class=None, xClass=None,
         Style=None, xStyle=None,
+        Attrs=None,
         **attrs
     ):
         ...
@@ -98,14 +99,21 @@ class Tag:
         render = v
         if isinstance(v, bytes):
             render = v.decode()
+
         elif isinstance(v, str):
-            def render(ctx: dict):
-                return v.format_map(ctx)
+            try:
+                v.format_map({})
+                # if we're here it is just string
+                # do nothing
+            except KeyError:
+                render = v.format_map
+
         elif isinstance(v, VarRef):
             var_name = v.var_name
 
             def render(ctx: dict):
                 return ctx.get(var_name)
+
         elif isinstance(v, set):
             assert len(v) == 1
             v = [*v][0]
@@ -140,7 +148,8 @@ class Tag:
                         dct[dk] = self._make_value_render(dv)
                 attrs[k] = dct
             else:
-                attrs[k] = self._make_value_render(v)
+                force_eval = k == 'Attrs'
+                attrs[k] = self._make_value_render(v, force_eval)
         return attrs, for_loop, if_cond
 
     @classmethod
@@ -166,8 +175,18 @@ class Tag:
     @classmethod
     def _render_attrs(cls, attrs: dict, ctx: dict):
         ret = {}
+        attrs_assignment = None
+        render_value = cls._render_value
         for a, v in attrs.items():
-            ret[a] = cls._render_value(v, ctx)
+            v = render_value(v, ctx)
+            if a == 'Attrs':
+                attrs_assignment = v
+            else:
+                ret[a] = v
+
+        if attrs_assignment is not None:
+            ret.update(attrs_assignment)
+
         args = [
             ('Class', 'exClass', ' ', cls._class_render),
             ('Style', 'exStyle', ';', cls._style_render)
@@ -178,6 +197,7 @@ class Tag:
             ret.pop(exa, None)
             if merged:
                 ret[a.lower()] = merged
+
         return ret
 
     @classmethod
@@ -219,7 +239,6 @@ class Tag:
         return ret
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
-        # extend context with props
         self_ctx = {**u.global_ctx, **ctx}
         self_rendered = self.render_self(self_ctx)
         yield self_rendered
@@ -341,6 +360,7 @@ class Component(MetaTag):
         For=None, If=None, Elif=None, Else=None,
         Class=None, xClass=None,
         Style=None, xStyle=None,
+        Attrs=None,
         **attrs
     ):
         ...
