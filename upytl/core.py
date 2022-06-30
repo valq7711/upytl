@@ -333,7 +333,9 @@ class SlotTemplate(MetaTag):
     special_attrs = {'Slot', 'SlotProps'}
 
     def _process_attrs(self, attrs: dict):
-        attrs, *extra = super()._process_attrs(attrs)
+        #attrs, *extra = super()._process_attrs(attrs)
+        tmp = super()._process_attrs(attrs)
+        attrs, extra = tmp[0], tmp[1:]
         self.Slot = attrs.pop('Slot', 'default')
         self.SlotProps = attrs.pop('SlotProps', None)
         return attrs, *extra
@@ -383,7 +385,9 @@ class Component(MetaTag):
         for k in [*attrs]:
             if k in self.props:
                 props[k] = attrs.pop(k)
-        props, *_ = super()._process_attrs(props)
+        #props, *_ = super()._process_attrs(props)
+        tmp = super()._process_attrs(props)
+        props = tmp[0]
         self.props = props
         return super()._process_attrs(attrs)
 
@@ -446,7 +450,9 @@ class GenericComponent(Tag):
     component_factory: Union[str, Type[Tag]]
 
     def _process_attrs(self, attrs: dict):
-        attrs, *extra = super()._process_attrs(attrs)
+        # attrs, *extra = super()._process_attrs(attrs)
+        tmp = super()._process_attrs(attrs)
+        attrs, extra = tmp[0], tmp[1:]
         self.component_factory = attrs.pop('Is')
         return attrs, *extra
 

@@ -13,3 +13,7 @@ __all__ = (
     'UPYTL',
     'GenericComponent',
 )
+
+__author__ = "Kucherov Valery <valq7711@gmail.com>"
+__license__ = "MIT"
+__version__ = "0.0.2"
