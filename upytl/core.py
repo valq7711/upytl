@@ -338,7 +338,7 @@ class SlotTemplate(MetaTag):
         attrs, extra = tmp[0], tmp[1:]
         self.Slot = attrs.pop('Slot', 'default')
         self.SlotProps = attrs.pop('SlotProps', None)
-        return attrs, *extra
+        return [attrs, *extra]
 
     def render_special(self, spec_attr: str, u: 'UPYTL', ctx: dict):
         assert spec_attr in self.special_attrs
@@ -454,7 +454,7 @@ class GenericComponent(Tag):
         tmp = super()._process_attrs(attrs)
         attrs, extra = tmp[0], tmp[1:]
         self.component_factory = attrs.pop('Is')
-        return attrs, *extra
+        return [attrs, *extra]
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
         self_ctx = {**u.global_ctx, **ctx}
