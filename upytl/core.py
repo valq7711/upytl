@@ -175,30 +175,24 @@ class Tag:
     @classmethod
     def _render_attrs(cls, attrs: dict, ctx: dict):
         ret = {}
-        attrs_assignment = None
         render_value = cls._render_value
         for a, v in attrs.items():
-            v = render_value(v, ctx)
-            if a == 'Attrs':
-                attrs_assignment = v
-            else:
-                ret[a] = v
+            ret[a] = render_value(v, ctx)
+        return ret
 
-        if attrs_assignment is not None:
-            ret.update(attrs_assignment)
-
+    @classmethod
+    def _render_attrs_postproc(cls, attrs: dict, ctx: dict):
         args = [
             ('Class', 'exClass', ' ', cls._class_render),
             ('Style', 'exStyle', ';', cls._style_render)
         ]
         for a, exa, sep, item_render in args:
-            merged = cls._render_merge_special_attrs(ret, a, exa, sep=sep, item_render=item_render, ctx=ctx)
-            ret.pop(a, None)
-            ret.pop(exa, None)
+            merged = cls._render_merge_special_attrs(attrs, a, exa, sep=sep, item_render=item_render, ctx=ctx)
+            attrs.pop(a, None)
+            attrs.pop(exa, None)
             if merged:
-                ret[a.lower()] = merged
-
-        return ret
+                attrs[a.lower()] = merged
+        return attrs
 
     @classmethod
     def _render_merge_special_attrs(
@@ -231,12 +225,21 @@ class Tag:
         kword, v = self.if_cond
         return (kword, self._render_value(v, ctx))
 
-    def render_self(self, ctx):
+    @classmethod
+    def _make_self_rendered(cls, attrs):
         ret = RenderedTag(
-            tag_class=self.__class__,
-            attrs=self._render_attrs(self.attrs, ctx),
+            tag_class=cls,
+            attrs=attrs,
         )
         return ret
+
+    def render_self(self, ctx):
+        rendered_attrs = self._render_attrs(self.attrs, ctx)
+        assign_attrs = rendered_attrs.pop('Attrs', None)
+        if assign_attrs is not None:
+            rendered_attrs.update(assign_attrs)
+        self._render_attrs_postproc(rendered_attrs, ctx)
+        return self._make_self_rendered(rendered_attrs)
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
         self_ctx = {**u.global_ctx, **ctx}
@@ -355,6 +358,7 @@ class Component(MetaTag):
     # instance attrs
     props: Union[list, dict]
     has_root: bool
+    assign_attrs: Dict
 
     @overload
     def __init__(
@@ -385,11 +389,13 @@ class Component(MetaTag):
         for k in [*attrs]:
             if k in self.props:
                 props[k] = attrs.pop(k)
-        #props, *_ = super()._process_attrs(props)
         tmp = super()._process_attrs(props)
         props = tmp[0]
         self.props = props
-        return super()._process_attrs(attrs)
+
+        attrs, for_loop, if_cond = super()._process_attrs(attrs)
+        self.assign_attrs = attrs.pop('Attrs', None)
+        return attrs, for_loop, if_cond
 
     def _render_props(self, ctx: dict):
         render_prop = self._render_value
@@ -403,9 +409,22 @@ class Component(MetaTag):
         out_ctx = ctx
         props_context = {**u.global_ctx, **ctx}
         props_rendered = self._render_props(props_context)
+        # maybe props passed in Attrs
+        assign_attrs = {}
+        if self.assign_attrs is not None:
+            assign_attrs: Dict = self._render_value(self.assign_attrs, props_context)
+            for k in [*assign_attrs]:
+                if k in self.props:
+                    props_rendered[k] = assign_attrs.pop(k)
         self_ctx = {**props_context, **props_rendered}
+        rendered_attrs = {
+            **self._render_attrs(self.attrs, self_ctx),
+            **assign_attrs
+        }
+
         # yeild tag/attrs
-        self_rendered = self.render_self(self_ctx)
+        self_rendered = self._make_self_rendered(rendered_attrs)
+
         yield self_rendered
         yield u.START_BODY
         # resolve for-loop/if-else
