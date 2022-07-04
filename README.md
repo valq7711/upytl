@@ -1,6 +1,10 @@
 # UPYTL
 Ultra Pythonic Template Language (inspired by Vue.js)
 
+## Installation And Usage
+`python -m pip install upytl`
+
+
 ```python
 from upytl import UPYTL, html as h
 
