@@ -361,7 +361,6 @@ class Component(MetaTag):
     template: Union[str, dict] = None
     template_factory: Callable
     has_root = False
-    _in_template_creation = False
     _template_processed = False
 
     # instance attrs
@@ -380,11 +379,12 @@ class Component(MetaTag):
         ...
 
     def __new__(cls, **attrs):
-        if not cls._template_processed and not cls._in_template_creation:
+        # we need cls own property, so use `cls.__dict__`
+        template_processed = cls.__dict__.get('_template_processed', False)
+        if not template_processed:
+            cls._template_processed = True
             if cls.template is None:
-                cls._in_template_creation = True
                 template = cls.template = cls.template_factory()
-                cls._in_template_creation = False
             else:
                 template = cls.template
 
@@ -394,7 +394,6 @@ class Component(MetaTag):
                 and len(template) == 1
                 and not isinstance([*template][0], Slot)
             )
-            cls._template_processed = True
         return super().__new__(cls)
 
     def __init__(self, **attrs):
