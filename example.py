@@ -75,6 +75,26 @@ class Form(Component):
     }
 
 
+class TreeView(Component):
+    """
+    This class demonstrates the use of the `template_factory` method
+    which allows to recursively use the component in its template.
+    """
+    props = dict(
+        tree=[],
+        depth=0
+    )
+
+    @staticmethod
+    def template_factory():
+        return {
+            h.Div(For='it in tree', Style={'margin-left': {'f"{depth * 4}px"'} }): {
+                h.Div(): '[[ it["name"] ]]',
+                TreeView(If='"nodes" in it', depth={'depth+1'}, tree={'it["nodes"]'}): ''
+            },
+        }
+
+
 # Now define a specific page template
 
 t = {
@@ -85,7 +105,9 @@ t = {
             ),
             h.Div():{
                 Form(fields={'fields'}):''
-            }
+            },
+            h.H4():'Tree-view example:',
+            TreeView(tree={'tree'}):{}
         }
     }
 }
@@ -120,6 +142,23 @@ ctx = dict(
                 dict(name='gray', value='#888888'),
             ],
         }
+    ],
+    tree=[
+        {
+            'name': 'Top',
+            'nodes': [
+                {'name': 'child-1'},
+                {
+                    'name': 'child-2',
+                    'nodes': [
+                        {'name': '2-child-1'},
+                        {'name': '2-child-2'},
+                        {'name': '2-child-3'},
+                    ]
+                },
+                {'name': 'child-3'},
+            ]
+        },
     ]
 )
 

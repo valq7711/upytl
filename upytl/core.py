@@ -358,11 +358,14 @@ class SlotTemplate(MetaTag):
 
 class Component(MetaTag):
 
-    template: Union[str, dict]
+    template: Union[str, dict] = None
+    template_factory: Callable
+    has_root = False
+    _in_template_creation = False
+    _template_processed = False
 
     # instance attrs
     props: Union[list, dict]
-    has_root: bool
     assign_attrs: Dict
 
     @overload
@@ -376,15 +379,27 @@ class Component(MetaTag):
     ):
         ...
 
+    def __new__(cls, **attrs):
+        if not cls._template_processed and not cls._in_template_creation:
+            if cls.template is None:
+                cls._in_template_creation = True
+                template = cls.template = cls.template_factory()
+                cls._in_template_creation = False
+            else:
+                template = cls.template
+
+            # if we have root - pass down attrs
+            cls.has_root = (
+                isinstance(template, dict)
+                and len(template) == 1
+                and not isinstance([*template][0], Slot)
+            )
+            cls._template_processed = True
+        return super().__new__(cls)
+
     def __init__(self, **attrs):
         super().__init__(**attrs)
         self.slots = set()
-        # if we have root - pass down attrs
-        self.has_root = (
-            isinstance(self.template, dict)
-            and len(self.template) == 1
-            and not isinstance([*self.template][0], Slot)
-        )
 
     def _process_attrs(self, attrs: dict):
         if isinstance(self.props, list):
