@@ -1,9 +1,15 @@
+import html
+
 from .core import Tag, MetaTag, VoidTag, Template
+
 
 # flake8: noqa E701
 
+class HTMLText(MetaTag): ...
+class Text(MetaTag):
+    def format_text_body(self, body: str) -> str:
+        return html.escape(body, quote=True)
 
-class Text(MetaTag): ...
 
 class Figure(Tag): ...
 class Small(Tag): ...
