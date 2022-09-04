@@ -247,13 +247,11 @@ class Tag:
         yield self_rendered
         if not body:
             return
-        if not isinstance(body, dict):
+        if isinstance(body, str):
             code = u.compile_template(body)
             if code is not None:
-                yield eval(code, None, self_ctx)
-            else:
-                # no code found in body
-                yield body
+                body = eval(code, None, self_ctx)
+            yield self.format_text_body(body)
             return
 
         yield u.START_BODY
@@ -261,6 +259,13 @@ class Tag:
             ch_ctx = ctx if loop_vars is None else {**ctx, **loop_vars}
             yield from ch.render(u, ch_ctx, ch_body)
         yield u.END_BODY
+
+    def format_text_body(self, body: str):
+        """Return formatted/escaped body.
+
+        NOTE: This hook is only invoked if the body is a `string` (i.e. text node).
+        """
+        return body
 
     def __repr__(self):
         nm = self.tag_name or self.__class__.__name__
@@ -673,9 +678,10 @@ class HTMLPrinter:
             self._print_with_indent(it)
             self.end_body()
         else:
-            close_tag = self.stack and self.stack[-1]
+            stack = self.stack
+            close_tag = stack[-1] if len(stack) else None
             if isinstance(close_tag, str):
-                self.stack.pop()
+                stack.pop()
                 self._print(close_tag)
             if not self.debug and it.tag_class.is_meta_tag:
                 tag_def = None
@@ -690,7 +696,7 @@ class HTMLPrinter:
                 end_tag_def, close_tag = ['', f'</{tag_name}>'] if it.is_body_allowed else [' /', '']
                 tag_def = f'<{tag_name}{sep}{attrs}{end_tag_def}>'
             self._print_with_indent(tag_def)
-            self.stack.append(close_tag)
+            stack.append(close_tag)
         self.prev_tag = it
 
 
