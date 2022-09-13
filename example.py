@@ -86,7 +86,8 @@ class TreeView(Component):
     )
 
     @staticmethod
-    def template_factory():
+    def template_factory(cls):
+        TreeView = cls
         return {
             h.Div(For='it in tree', Style={'margin-left': {'f"{depth * 4}px"'} }): {
                 h.Div(): '[[ it["name"] ]]',
@@ -153,7 +154,13 @@ ctx = dict(
                     'nodes': [
                         {'name': '2-child-1'},
                         {'name': '2-child-2'},
-                        {'name': '2-child-3'},
+                        {
+                            'name': '2-child-3',
+                            'nodes': [
+                                {'name': '2-child-3/#1'},
+                                {'name': '2-child-3/#2'},
+                            ]
+                        },
                     ]
                 },
                 {'name': 'child-3'},

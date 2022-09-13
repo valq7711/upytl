@@ -356,7 +356,28 @@ class SlotTemplate(MetaTag):
         return v
 
 
-class Component(MetaTag):
+class ComponentMeta(type):
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        if name == 'Component':
+            return
+        template_processed = cls.__dict__.get('_template_processed', False)
+        if not template_processed:
+            cls._template_processed = True
+            if cls.template is None:
+                template = cls.template = cls.template_factory(cls)
+            else:
+                template = cls.template
+
+            # if we have root - pass down attrs
+            cls.has_root = (
+                isinstance(template, dict)
+                and len(template) == 1
+                and not isinstance([*template][0], Slot)
+            )
+
+
+class Component(MetaTag, metaclass=ComponentMeta):
 
     template: Union[str, dict] = None
     template_factory: Callable
@@ -377,24 +398,6 @@ class Component(MetaTag):
         **attrs
     ):
         ...
-
-    def __new__(cls, **attrs):
-        # we need cls own property, so use `cls.__dict__`
-        template_processed = cls.__dict__.get('_template_processed', False)
-        if not template_processed:
-            cls._template_processed = True
-            if cls.template is None:
-                template = cls.template = cls.template_factory()
-            else:
-                template = cls.template
-
-            # if we have root - pass down attrs
-            cls.has_root = (
-                isinstance(template, dict)
-                and len(template) == 1
-                and not isinstance([*template][0], Slot)
-            )
-        return super().__new__(cls)
 
     def __init__(self, **attrs):
         super().__init__(**attrs)
