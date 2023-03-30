@@ -503,7 +503,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
         assign_attrs: dict = self.assign_attrs.get(self_ctx)
         assign_attrs = assign_attrs.copy()
 
-        if isinstance(body, str):
+        if isinstance(body, str) or isinstance(body, dict) and not isinstance(next(iter(body), None), SlotTemplate):
             body = {SlotTemplate(): body}
         slots_content: Dict[SlotTemplate, Union[str, dict]] = body
         # save parent cxt as slots content should be rendered in it, not in component context
