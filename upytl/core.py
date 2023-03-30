@@ -438,7 +438,6 @@ class Component(MetaTag, metaclass=ComponentMeta):
 
     # instance attrs
     props: Union[list, Dict[str, ValueGetter]]
-    assign_attrs: Dict[str, ValueGetter]
 
     @overload
     def __init__(
