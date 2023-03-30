@@ -1,5 +1,6 @@
 import io
 import re
+import functools
 from enum import Enum
 from types import SimpleNamespace, CodeType
 
@@ -707,6 +708,27 @@ class UPYTL:
                 else:
                     out.print(it)
         return out.buf.getvalue()
+
+    def view(self, template, **defaults):
+
+        from collections.abc import MutableMapping
+
+        def decorator(func):
+
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                result = func(*args, **kwargs)
+                if isinstance(result, (dict, MutableMapping)):
+                    tplvars = defaults.copy()
+                    tplvars.update(result)
+                    return self.render(template, tplvars)
+                elif result is None:
+                    return self.render(template, defaults)
+                return result
+
+            return wrapper
+
+        return decorator
 
 
 class HTMLPrinter:
