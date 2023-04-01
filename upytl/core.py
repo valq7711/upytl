@@ -146,8 +146,9 @@ def set_info(init):
     @functools.wraps(init)
     def inner(self: 'Tag', *args, **kw):
         if self._info is None:
-            stack_trace = inspect.stack()
-            self._info = {'created_at': f'{stack_trace[1][1]}:{stack_trace[1][2]}'}
+            frm = inspect.currentframe().f_back
+            self._info = {'created_at': f'{frm.f_code.co_filename}:{frm.f_lineno}'}
+            del frm
         init(self, *args, **kw)
 
     return inner
