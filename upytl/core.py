@@ -3,11 +3,49 @@ import re
 import functools
 from enum import Enum
 from types import SimpleNamespace, CodeType
+import inspect
 
-from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, Any, TypeVar
+from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, Any, TypeVar, Optional
 
 
 AUTO_TAG_NAME = object()
+
+
+class RenderError(Exception):
+    def __init__(self, component: 'Tag', orig_exc):
+        super().__init__(str(orig_exc))
+        self.component = component
+        self.orig_exc = orig_exc
+        self.html_dump = ''
+
+    def set_html_dump(self, s: str):
+        self.html_dump = s
+
+    def __repr__(self):
+        return (
+            f'Error: {self.orig_exc}\n'
+            f'while rendering {self.component}'
+        )
+
+    def __str__(self):
+        return (
+            f'{self.__repr__()}\n'
+            f'Rendered dump:\n{self.html_dump}\n'
+            f'... [ Error goes here ]'
+        )
+
+
+def catch_errors(fun):
+
+    @functools.wraps(fun)
+    def inner(self, *args, **kw):
+        try:
+            yield from fun(self, *args, **kw)
+        except RenderError:
+            raise
+        except Exception as exc:
+            raise RenderError(self, exc) from exc
+    return inner
 
 
 class RenderedTag(SimpleNamespace):
@@ -103,6 +141,18 @@ class ValueGettersDict(dict):
         return ValueGettersDict(super().copy())
 
 
+def set_info(init):
+
+    @functools.wraps(init)
+    def inner(self: 'Tag', *args, **kw):
+        if self._info is None:
+            stack_trace = inspect.stack()
+            self._info = {'created_at': f'{stack_trace[1][1]}:{stack_trace[1][2]}'}
+        init(self, *args, **kw)
+
+    return inner
+
+
 class Tag:
 
     tag_name: Union[str, object] = AUTO_TAG_NAME
@@ -115,6 +165,7 @@ class Tag:
     for_loop: tuple  # (var_names, iterable_factory)
     if_cond: Tuple[str, ValueGetter]   # (kword:['If' | 'Elif' | 'Else'] , value:[callable | castable to bool])
     assign_attrs: ValueGetter
+    _info: Optional[dict] = None
 
     @overload
     def __init__(
@@ -128,6 +179,7 @@ class Tag:
     ):
         ...
 
+    @set_info
     def __init__(self, **attrs):
         """
         xClass, xStyle, xData mean eXtend Class or Style or Data
@@ -302,6 +354,7 @@ class Tag:
         self._render_attrs_postproc(rendered_attrs, ctx)
         return self._make_self_rendered(rendered_attrs)
 
+    @catch_errors
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None], passed_attrs: dict = None):
         self_ctx = {**u.global_ctx, **ctx}
         self_rendered = self.render_self(self_ctx, passed_attrs)
@@ -330,7 +383,7 @@ class Tag:
 
     def __repr__(self):
         nm = self.tag_name or self.__class__.__name__
-        return f'<{nm}({str(self.attrs)})>'
+        return f'<{nm}({str(self.attrs)})> {self._info}'
 
 
 class VoidTag(Tag):
@@ -452,6 +505,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
     ):
         ...
 
+    @set_info
     def __init__(self, **attrs):
         super().__init__(**attrs)
         self.slots = set()
@@ -491,6 +545,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
                 trg[k] = v
         return trg
 
+    @catch_errors
     def render(
             self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None],
             passed_attrs: Dict[str, Union[Any, dict]] = None
@@ -694,9 +749,17 @@ class UPYTL:
         return self.scope.pop()
 
     def render(self, template: Dict[Tag, dict], ctx, *, indent=2, debug=False, doctype='html'):
+        out = HTMLPrinter(indent, debug, doctype)
+        try:
+            self._render(template, ctx, out)
+            return out.buf.getvalue()
+        except RenderError as exc:
+            exc.set_html_dump(out.buf.getvalue())
+            raise
+
+    def _render(self, template: Dict[Tag, dict], ctx: dict, out: 'HTMLPrinter'):
         ctx = {**self.default_ctx, **ctx}
         self.scope = []
-        out = HTMLPrinter(indent, debug, doctype)
         # wrap in Template to ensure foo-loop/if-else will be processed properly
         template = {Template(): template}
         for k, v in template.items():
@@ -707,7 +770,6 @@ class UPYTL:
                     out.end_body()
                 else:
                     out.print(it)
-        return out.buf.getvalue()
 
     def view(self, template, **defaults):
 
