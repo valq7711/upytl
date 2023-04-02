@@ -29,7 +29,6 @@ print(rendered)
 - for-loop
 - if-elif-else
 - custom components with slots
-- generic components
 
 ## About
 Default render-behaviour for attributes is `str.format`, so you can
