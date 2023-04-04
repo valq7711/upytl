@@ -4,6 +4,7 @@ import functools
 from enum import Enum
 from types import SimpleNamespace, CodeType
 import inspect
+import threading
 
 from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, Any, TypeVar, Optional
 
@@ -668,10 +669,18 @@ class UPYTL:
     registered_components: Dict[str, Tag]
 
     def __init__(self, *, global_ctx: dict = None, default_ctx: dict = None):
+        self._local = threading.local()
         self.global_ctx = global_ctx or {}
         self.default_ctx = default_ctx or {}
-        self.scope = None
         self.registered_components = {}
+
+    @property
+    def scope(self) -> list:
+        return self._local.scope
+
+    @scope.setter
+    def scope(self, scope: list):
+        self._local.scope = scope
 
     def get_component_factory(self, name: str) -> Type[Tag]:
         return self.registered_components[name]
