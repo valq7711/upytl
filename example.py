@@ -1,5 +1,5 @@
 from upytl import (
-    Component, Slot, SlotTemplate, UPYTL, html as h
+    Component, Template, Slot, SlotTemplate, UPYTL, html as h
 )
 
 # flake8: noqa E226
@@ -43,16 +43,19 @@ class Field(Component):
     )
 
     template = {
-        h.Label(If='type=="text"'):{
-            h.Text():'[[name]]',
-            h.Input(name='{name}', value='{value}'):''
-        },
-        h.Label(Elif='type=="select"'):{
-            h.Text():'[[name]]',
-            h.Select(name='{name}'):{
-                h.Option(For='opt in options', value='{opt[value]}', selected={'opt["value"]==value'}):
-                     '[[ opt.get("name", opt["value"]) ]]'
-            },
+        h.Label(): {
+            h.Text(): '[[name]]',
+            Template(Is='{type}', name='{name}'): {
+                'text': {
+                    h.Input(value='{value}'):''
+                },
+                'select': {
+                    h.Select():{
+                        h.Option(For='opt in options', value='{opt[value]}', selected={'opt["value"]==value'}):
+                            '[[ opt.get("name", opt["value"]) ]]'
+                    },
+                }
+            }
         },
     }
 

@@ -355,25 +355,31 @@ class Tag:
         self._render_attrs_postproc(rendered_attrs, ctx)
         return self._make_self_rendered(rendered_attrs)
 
+    def _render_text_body(self, u: 'UPYTL', body: str, ctx: dict):
+        code = u.compile_template(body)
+        if code is not None:
+            body = eval(code, None, ctx)
+        return self.format_text_body(body)
+
+    def _render_dict_body(self, u: 'UPYTL', body: str, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
+        yield u.START_BODY
+        for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
+            ch_ctx = ctx if loop_vars is None else dict(ctx, **loop_vars)
+            yield from ch.render(u, ch_ctx, ch_body)
+        yield u.END_BODY
+
     @catch_errors
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None], passed_attrs: dict = None):
-        self_ctx = {**u.global_ctx, **ctx}
+        self_ctx = dict(u.global_ctx, **ctx)
+
         self_rendered = self.render_self(self_ctx, passed_attrs)
         yield self_rendered
         if not body:
             return
         if isinstance(body, str):
-            code = u.compile_template(body)
-            if code is not None:
-                body = eval(code, None, self_ctx)
-            yield self.format_text_body(body)
+            yield self._render_text_body(u, body, self_ctx)
             return
-
-        yield u.START_BODY
-        for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
-            ch_ctx = ctx if loop_vars is None else {**ctx, **loop_vars}
-            yield from ch.render(u, ch_ctx, ch_body)
-        yield u.END_BODY
+        yield from self._render_dict_body(u, body, self_ctx, ctx, self_rendered)
 
     def format_text_body(self, body: str):
         """Return formatted/escaped body.
@@ -397,7 +403,15 @@ class MetaTag(Tag):
 
 
 class Template(MetaTag):
-    pass
+    def _render_dict_body(self, u: 'UPYTL', body: str, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
+        self_attrs = self_rendered.attrs
+        if 'Is' in self_attrs:
+            body = body[self_attrs.pop('Is')]
+        yield u.START_BODY
+        for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
+            ch_ctx = ctx if loop_vars is None else dict(ctx, **loop_vars)
+            yield from ch.render(u, ch_ctx, ch_body, passed_attrs=self_attrs)
+        yield u.END_BODY
 
 
 class Slot(MetaTag):
@@ -551,7 +565,9 @@ class Component(MetaTag, metaclass=ComponentMeta):
             self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None],
             passed_attrs: Dict[str, Union[Any, dict]] = None
     ):
-        self_ctx = {**u.global_ctx, **ctx}
+        self_ctx = u.global_ctx.copy()
+        self_ctx.update(ctx)
+
         if passed_attrs is None:
             passed_attrs = {}
         else:
