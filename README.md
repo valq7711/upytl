@@ -29,6 +29,7 @@ print(rendered)
 - for-loop
 - if-elif-else
 - custom components with slots
+- component selector
 
 ## About
 Default render-behaviour for attributes is `str.format`, so you can
@@ -47,13 +48,13 @@ If you don't want any processing just pass `bytes`
 h.Div(Class=b'no-{processing}'): 'Header'
 ```
 
-To evaluate python expression pass string wrapped in `set` 
+To evaluate python expression pass string wrapped in `set`
 
 ```python
 h.Button(disabled={'not allow_submit'}): 'Submit'
 ```
 
-There are special attributes: `For`, `If`, `Elif`, `Else`, their values are always treated as python expressions except for `Else` (its value is ignored) 
+There are special attributes: `For`, `If`, `Elif`, `Else`, their values are always treated as python expressions except for `Else` (its value is ignored)
 Also note that `For`-syntax is a bit trimmed compared to pure python.
 ```python
 t = {

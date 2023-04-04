@@ -346,8 +346,16 @@ class Tag:
         )
         return ret
 
-    def render_self(self, ctx, passed_attrs: Dict[str, Union[ValueGetter, dict]] = None):
-        attrs = self.attrs.copy()
+    def render_self(
+        self, ctx, passed_attrs: Dict[str, Union[ValueGetter, dict]] = None,
+        passed_defaults: Dict[str, Union[ValueGetter, dict]] = None
+    ):
+        if passed_defaults is not None:
+            attrs = passed_defaults.copy()
+            attrs.update(self.attrs)
+        else:
+            attrs = self.attrs.copy()
+
         attrs.update(self.assign_attrs.get(ctx))
         if passed_attrs is not None:
             attrs.update(passed_attrs)
@@ -370,10 +378,13 @@ class Tag:
         yield u.END_BODY
 
     @catch_errors
-    def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None], passed_attrs: dict = None):
+    def render(
+            self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None], passed_attrs: dict = None,
+            passed_defaults: dict = None
+    ):
         self_ctx = dict(u.global_ctx, **ctx)
 
-        self_rendered = self.render_self(self_ctx, passed_attrs)
+        self_rendered = self.render_self(self_ctx, passed_attrs, passed_defaults)
         yield self_rendered
         if not body:
             return
@@ -390,7 +401,7 @@ class Tag:
         return body
 
     def __repr__(self):
-        nm = self.tag_name or self.__class__.__name__
+        nm = self.tag_name if isinstance(self.tag_name, str) else self.__class__.__name__
         return f'<{nm}({str(self.attrs)})> {self._info}'
 
 
@@ -404,6 +415,17 @@ class MetaTag(Tag):
 
 
 class Template(MetaTag):
+
+    @classmethod
+    def _render_attrs(
+            cls, attrs: Dict[str, Union[ValueGetter, dict]], ctx: dict, *, skip: dict = None, render_nested=False
+    ) -> Dict[str, Any]:
+        return super()._render_attrs(attrs, ctx, skip=skip, render_nested=True)
+
+    @classmethod
+    def _render_attrs_postproc(cls, attrs: dict, ctx: dict):
+        pass
+
     def _render_dict_body(self, u: 'UPYTL', body: str, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
         self_attrs = self_rendered.attrs
         if 'Is' in self_attrs:
@@ -411,7 +433,7 @@ class Template(MetaTag):
         yield u.START_BODY
         for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
             ch_ctx = ctx if loop_vars is None else dict(ctx, **loop_vars)
-            yield from ch.render(u, ch_ctx, ch_body, passed_attrs=self_attrs)
+            yield from ch.render(u, ch_ctx, ch_body, passed_defaults=self_attrs)
         yield u.END_BODY
 
 
@@ -523,6 +545,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
 
     @set_info
     def __init__(self, **attrs):
+        self.props_set = set()
         super().__init__(**attrs)
         self.slots = set()
 
@@ -540,6 +563,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
         for k in [*attrs]:
             if k in self.props:
                 props[k] = ValueGetter(attrs.pop(k))
+                self.props_set.add(k)
         self.props = props
         return attrs, for_loop, if_cond
 
@@ -564,15 +588,14 @@ class Component(MetaTag, metaclass=ComponentMeta):
     @catch_errors
     def render(
             self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None],
-            passed_attrs: Dict[str, Union[Any, dict]] = None
+            passed_attrs: Dict[str, Union[Any, dict]] = None, passed_defaults: Dict[str, Union[Any, dict]] = None
     ):
         self_ctx = u.global_ctx.copy()
         self_ctx.update(ctx)
 
-        if passed_attrs is None:
-            passed_attrs = {}
-        else:
-            passed_attrs = passed_attrs.copy()
+        passed_attrs, passed_defaults = [
+            dct.copy() if dct is not None else {} for dct in (passed_attrs, passed_defaults)
+        ]
 
         assign_attrs: dict = self.assign_attrs.get(self_ctx)
         assign_attrs = assign_attrs.copy()
@@ -590,11 +613,22 @@ class Component(MetaTag, metaclass=ComponentMeta):
                 props_rendered[k] = assign_attrs.pop(k)
             elif k in passed_attrs:
                 props_rendered[k] = passed_attrs.pop(k)
+            elif k in passed_defaults and k not in self.props_set:
+                props_rendered[k] = passed_defaults.pop(k)
             else:
-                props_rendered[k] = v.get(self_ctx)
+                if k in self.props_set:
+                    v = v.get(self_ctx)
+                    passed_defaults.pop(k, None)
+                elif k in passed_defaults:
+                    v = passed_defaults.pop(k)
+                else:
+                    v = v.get(self_ctx)
+                props_rendered[k] = v
         self_ctx.update(props_rendered)
+
+        passed_defaults.update(self.attrs)
         rendered_attrs = self._render_attrs(
-            self.attrs, self_ctx, skip=assign_attrs, render_nested=True
+            passed_defaults, self_ctx, skip=assign_attrs, render_nested=True
         )
         rendered_attrs.update(assign_attrs)
         passed_attrs = self._merge_attrs(rendered_attrs, passed_attrs)
