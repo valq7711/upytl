@@ -6,7 +6,9 @@ from types import SimpleNamespace, CodeType
 import inspect
 import threading
 
-from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, Any, TypeVar, Optional
+from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, TypeVar, Optional
+
+from .helpers import AttrsDict, ValueGetter, ValueGettersDict
 
 
 AUTO_TAG_NAME = object()
@@ -71,75 +73,6 @@ class RenderedTag(SimpleNamespace):
     @property
     def is_meta_tag(self) -> bool:
         return self.tag_class.is_meta_tag
-
-
-class ValueGetter:
-    is_static = True
-
-    def __init__(self, value, *, force_compile=False, is_static=False):
-        if is_static:
-            self._value_gtter = value
-            assert not callable(value)
-        else:
-            self._value_gtter = self._make_value_getter(value, force_compile)
-
-        if callable(self._value_gtter):
-            self.get = self._value_gtter
-            self.is_static = False
-        else:
-            self.get = self._get_static_value_method
-
-    def get(self, ctx):
-        '''See `__init__`'''
-        pass
-
-    def _get_static_value_method(self, ctx: dict):
-        return self._value_gtter
-
-    @staticmethod
-    def _make_value_getter(v, force_compile) -> Union[str, Callable[[dict], Any]]:
-        if force_compile:
-            if isinstance(v, str):
-                code_obj = compile(v, '<string>', 'eval')
-
-                def render(ctx: dict):
-                    return eval(code_obj, None, ctx)
-                return render
-            return v
-
-        render = v
-        if isinstance(v, bytes):
-            render = v.decode()
-
-        elif isinstance(v, str):
-            try:
-                v.format_map({})
-                # if we're here it is just string
-                # do nothing
-            except KeyError:
-                render = v.format_map
-
-        elif isinstance(v, set):
-            assert len(v) == 1
-            v = [*v][0]
-            code_obj = compile(v, '<string>', 'eval')
-
-            def render(ctx: dict):
-                return eval(code_obj, None, ctx)
-
-        return render
-
-
-class ValueGettersDict(dict):
-
-    def render(self: Dict[str, ValueGetter], ctx: dict):
-        return {
-            k: v.get(ctx) if isinstance(v, ValueGetter) else v
-            for k, v in self.items()
-        }
-
-    def copy(self):
-        return ValueGettersDict(super().copy())
 
 
 def set_info(init):
@@ -238,100 +171,6 @@ class Tag:
 
         return attrs, for_loop, if_cond
 
-    @classmethod
-    def _class_render(cls, dct: dict):
-        """Render html class of a tag."""
-        return [klass for klass, enabled in dct.items() if enabled]
-
-    @classmethod
-    def _style_render(cls, dct: dict):
-        """Render html style of a tag."""
-        return [f'{prop}:{value}' for prop, value in dct.items() if value]
-
-    @classmethod
-    def _render_attrs(
-            cls, attrs: Dict[str, Union[ValueGetter, dict]], ctx: dict,
-            *, skip: dict = None, render_nested=False
-    ) -> Dict[str, Any]:
-        if skip is None:
-            skip = {}
-        ret = {}
-        for a, v in attrs.items():
-            if a in skip:
-                continue
-            if isinstance(v, ValueGetter):
-                v = v.get(ctx)
-            elif render_nested and isinstance(v, ValueGettersDict):
-                v = v.render(ctx)
-            ret[a] = v
-        return ret
-
-    @classmethod
-    def _render_attrs_postproc(cls, attrs: dict, ctx: dict):
-        args = [
-            ('Class', 'xClass', ' ', cls._class_render),
-            ('Style', 'xStyle', ';', cls._style_render)
-        ]
-        for a, exa, sep, dict_mapper in args:
-            merged = cls._render_merge_special_attrs(attrs, a, exa, sep=sep, dict_mapper=dict_mapper, ctx=ctx)
-            attrs.pop(a, None)
-            attrs.pop(exa, None)
-            if merged:
-                attrs[a.lower()] = merged
-        cls._render_data_attrs(attrs, ctx)
-
-    @classmethod
-    def _render_data_attrs(cls, attrs: dict, ctx: dict):
-        name, extra_name = 'Data', 'xData'
-        data: Dict[str, ValueGetter]
-        data, xdata = cls._resolve_extendable_attrs(attrs, name, extra_name, ctx)
-        attrs.pop(name, None)
-        attrs.pop(extra_name, None)
-        if data is None:
-            return
-        for a, v in data.items():
-            attrs[f'data-{a}'] = v
-
-    @classmethod
-    def _resolve_extendable_attrs(cls, attrs: Dict[str, Union[Any, dict]], name, extra_name, ctx: dict):
-        attr = attrs.get(name)
-        extra = attrs.get(extra_name, None)
-        if extra is not None and attr is None:
-            attr = extra
-            extra = None
-
-        if isinstance(extra, ValueGettersDict):
-            extra = extra.render(ctx)
-
-        if isinstance(attr, dict):
-            if isinstance(extra, dict):
-                attr = attr.copy()
-                attr.update(extra)
-                extra = None
-            if isinstance(attr, ValueGettersDict):
-                attr = attr.render(ctx)
-
-        return attr, extra
-
-    @classmethod
-    def _render_merge_special_attrs(
-            cls, attrs: dict, attr_name, extra_name,
-            *, sep: str, ctx: dict, dict_mapper
-    ):
-        attr, extra = cls._resolve_extendable_attrs(attrs, attr_name, extra_name, ctx)
-        if attr is None:
-            return
-
-        if isinstance(attr, dict):
-            attr = sep.join(dict_mapper(attr))
-
-        if isinstance(extra, dict):
-            extra = sep.join(dict_mapper(extra))
-
-        if extra:
-            attr = f'{attr}{sep}{extra}'
-        return attr
-
     def resolve_cond(self, ctx):
         if self.if_cond is None:
             return
@@ -339,30 +178,30 @@ class Tag:
         return (kword, v.get(ctx))
 
     @classmethod
-    def _make_self_rendered(cls, attrs):
+    def _render_attrs(cls, ctx: dict, attrs: AttrsDict):
+        attrs.render(ctx)
+        return attrs
+
+    @classmethod
+    def _make_self_rendered(cls, ctx: dict, attrs: AttrsDict):
+        attrs = cls._render_attrs(ctx, attrs)
         ret = RenderedTag(
             tag_class=cls,
             attrs=attrs,
         )
         return ret
 
-    def render_self(
-        self, ctx, passed_attrs: Dict[str, Union[ValueGetter, dict]] = None,
-        passed_defaults: Dict[str, Union[ValueGetter, dict]] = None
-    ):
+    def _merge_attrs(self, ctx: dict, passed_attrs: AttrsDict = None, passed_defaults: AttrsDict = None):
         if passed_defaults is not None:
             attrs = passed_defaults.copy()
-            attrs.update(self.attrs)
+            attrs.extend(self.attrs)
         else:
-            attrs = self.attrs.copy()
+            attrs = AttrsDict(self.attrs)
 
         attrs.update(self.assign_attrs.get(ctx))
         if passed_attrs is not None:
-            attrs.update(passed_attrs)
-
-        rendered_attrs = self._render_attrs(attrs, ctx)
-        self._render_attrs_postproc(rendered_attrs, ctx)
-        return self._make_self_rendered(rendered_attrs)
+            attrs.extend(passed_attrs)
+        return attrs
 
     def _render_text_body(self, u: 'UPYTL', body: str, ctx: dict):
         code = u.compile_template(body)
@@ -370,7 +209,7 @@ class Tag:
             body = eval(code, None, ctx)
         return self.format_text_body(body)
 
-    def _render_dict_body(self, u: 'UPYTL', body: str, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
+    def _render_dict_body(self, u: 'UPYTL', body: dict, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
         yield u.START_BODY
         for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
             ch_ctx = ctx if loop_vars is None else dict(ctx, **loop_vars)
@@ -384,7 +223,9 @@ class Tag:
     ):
         self_ctx = dict(u.global_ctx, **ctx)
 
-        self_rendered = self.render_self(self_ctx, passed_attrs, passed_defaults)
+        attrs = self._merge_attrs(self_ctx, passed_attrs, passed_defaults)
+        self_rendered = self._make_self_rendered(self_ctx, attrs)
+
         yield self_rendered
         if not body:
             return
@@ -417,23 +258,18 @@ class MetaTag(Tag):
 class Template(MetaTag):
 
     @classmethod
-    def _render_attrs(
-            cls, attrs: Dict[str, Union[ValueGetter, dict]], ctx: dict, *, skip: dict = None, render_nested=False
-    ) -> Dict[str, Any]:
-        return super()._render_attrs(attrs, ctx, skip=skip, render_nested=True)
+    def _render_attrs(cls, ctx: dict, attrs: AttrsDict):
+        attrs.render_values(ctx, render_complex_extendables=True)
+        return attrs
 
-    @classmethod
-    def _render_attrs_postproc(cls, attrs: dict, ctx: dict):
-        pass
-
-    def _render_dict_body(self, u: 'UPYTL', body: str, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
-        self_attrs = self_rendered.attrs
-        if 'Is' in self_attrs:
-            body = body[self_attrs.pop('Is')]
+    def _render_dict_body(self, u: 'UPYTL', body: dict, self_ctx: dict, ctx: dict, self_rendered: RenderedTag):
+        rendered_attrs = self_rendered.attrs
+        if 'Is' in rendered_attrs:
+            body = body[rendered_attrs.pop('Is')]
         yield u.START_BODY
         for ch, ch_body, loop_vars in u.iter_body(body, self_ctx):
             ch_ctx = ctx if loop_vars is None else dict(ctx, **loop_vars)
-            yield from ch.render(u, ch_ctx, ch_body, passed_defaults=self_attrs)
+            yield from ch.render(u, ch_ctx, ch_body, passed_defaults=rendered_attrs)
         yield u.END_BODY
 
 
@@ -457,7 +293,7 @@ class Slot(MetaTag):
         return self.attrs['SlotName']
 
     def render(self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None]):
-        self_ctx = {**u.global_ctx, **ctx}
+        self_ctx = dict(u.global_ctx, **ctx)
         slots_content_map: dict
         slots_content_map = u.pop_scope()
         slot_name = self.SlotName.get(self_ctx)
@@ -471,7 +307,8 @@ class Slot(MetaTag):
 
         del body
         stempl_ctx, stempl, stempl_body = to_slot
-        self_rendered = self.render_self(self_ctx)
+        attrs = AttrsDict(self.attrs)
+        self_rendered = self._make_self_rendered(self_ctx, attrs)
         yield self_rendered
 
         # inject slot props
@@ -490,7 +327,7 @@ class SlotTemplate(MetaTag):
 
     Slot: ValueGetter
     SlotProps: Union[ValueGetter, None]
-    special_attrs = {'Slot', 'SlotProps'}
+    special_attrs = ('Slot', 'SlotProps')
 
     def _process_attrs(self, attrs: dict):
         tmp = super()._process_attrs(attrs)
@@ -503,7 +340,7 @@ class SlotTemplate(MetaTag):
         assert spec_attr in self.special_attrs
         v: Union[None, ValueGetter] = getattr(self, spec_attr)
         if v is not None:
-            ctx = None if v.is_static else {**u.global_ctx, **ctx}
+            ctx = None if v.is_static else dict(u.global_ctx, **ctx)
             return v.get(ctx)
 
 
@@ -567,34 +404,20 @@ class Component(MetaTag, metaclass=ComponentMeta):
         self.props = props
         return attrs, for_loop, if_cond
 
-    def _merge_attrs(self, trg: dict, src: dict):
-        trg = trg.copy()
-        extendable_attrs = ['xClass', 'xStyle', 'xData']
-        extendables = {k: trg.pop(k, None) for k in extendable_attrs}
-        trg.update(src)
-        for k, v in extendables.items():
-            if v is None:
-                continue
-            trg_v = trg.get(k)
-            if trg_v is None:
-                trg[k] = v
-                continue
-            if isinstance(trg_v, dict) and isinstance(v, dict):
-                v = v.copy()
-                v.update(trg_v)
-                trg[k] = v
-        return trg
+    @classmethod
+    def _render_attrs(cls, ctx: dict, attrs: AttrsDict):
+        return attrs
 
     @catch_errors
     def render(
             self, u: 'UPYTL', ctx: dict, body: Union[dict, str, None],
-            passed_attrs: Dict[str, Union[Any, dict]] = None, passed_defaults: Dict[str, Union[Any, dict]] = None
+            passed_attrs: AttrsDict = None, passed_defaults: AttrsDict = None
     ):
         self_ctx = u.global_ctx.copy()
         self_ctx.update(ctx)
 
         passed_attrs, passed_defaults = [
-            dct.copy() if dct is not None else {} for dct in (passed_attrs, passed_defaults)
+            dct.copy() if dct is not None else AttrsDict() for dct in (passed_attrs, passed_defaults)
         ]
 
         assign_attrs: dict = self.assign_attrs.get(self_ctx)
@@ -626,18 +449,17 @@ class Component(MetaTag, metaclass=ComponentMeta):
                 props_rendered[k] = v
         self_ctx.update(props_rendered)
 
-        passed_defaults.update(self.attrs)
-        rendered_attrs = self._render_attrs(
-            passed_defaults, self_ctx, skip=assign_attrs, render_nested=True
-        )
+        rendered_attrs = passed_defaults
+        rendered_attrs.extend(self.attrs)
+        rendered_attrs.render_values(self_ctx, skip=assign_attrs, render_complex_extendables=True)
         rendered_attrs.update(assign_attrs)
-        passed_attrs = self._merge_attrs(rendered_attrs, passed_attrs)
 
         # yeild tag/attrs
-        self_rendered = self._make_self_rendered(rendered_attrs)
-
+        self_rendered = self._make_self_rendered(self_ctx, rendered_attrs)
         yield self_rendered
+
         yield u.START_BODY
+        passed_attrs = rendered_attrs.copy().extend(passed_attrs)
         # resolve for-loop/if-else
         slots_content_map = {}
         if slots_content:
@@ -818,7 +640,10 @@ class UPYTL:
             raise
 
     def _render(self, template: Dict[Tag, dict], ctx: dict, out: 'HTMLPrinter'):
-        ctx = {**self.default_ctx, **ctx}
+        if self.default_ctx:
+            dctx = self.default_ctx.copy()
+            dctx.update(ctx)
+            ctx = dctx
         self.scope = []
         # wrap in Template to ensure foo-loop/if-else will be processed properly
         template = {Template(): template}
