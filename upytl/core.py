@@ -54,10 +54,11 @@ def catch_errors(fun):
 class RenderedTag(SimpleNamespace):
     tag_class: Type['Tag']
     attrs: dict
+    tag: Union[str, None]
 
     @property
     def tag_name(self) -> str:
-        name = self.tag_class.tag_name
+        name = self.tag
         if name and isinstance(name, str):
             return name
 
@@ -94,9 +95,10 @@ class Tag:
 
     is_body_allowed = True  # no body - no closing tag
     is_meta_tag = False  # if True expose only body, e.g. Text, Template, MyComponent, Slot
+    ident_class = None  # identity non-overridable class
 
     # instance attributes
-    attrs: Dict[str, Union[ValueGetter, Dict[str, ValueGetter]]]
+    attrs: Dict[str, Union[ValueGetter, Dict[str, ValueGetter]]] = None
     for_loop: tuple  # (var_names, iterable_factory)
     if_cond: Tuple[str, ValueGetter]   # (kword:['If' | 'Elif' | 'Else'] , value:[callable | castable to bool])
     assign_attrs: ValueGetter
@@ -110,6 +112,7 @@ class Tag:
         Style=None, xStyle=None,
         Data=None, xData=None,
         Attrs=None,
+        Tag=None,
         **attrs
     ):
         ...
@@ -119,6 +122,9 @@ class Tag:
         """
         xClass, xStyle, xData mean eXtend Class or Style or Data
         """
+        if self.attrs is not None:
+            attrs = dict(self.attrs, **attrs)
+
         self.attrs, self.for_loop, self.if_cond = self._process_attrs(attrs)
         self.assign_attrs = self.attrs.pop('Attrs', ValueGetter({}))
 
@@ -143,8 +149,22 @@ class Tag:
 
     def _wrap_in_getters(self, attrs: dict):
         for k, v in attrs.items():
+            if isinstance(v, (list, tuple)):
+                # [b'button', 'is_large', ('is-{size}', 'size')] =>
+                #       {'button': True, 'is-large': 'is_large', 'is-{size}': 'size'}
+                v = dict([
+                    it if isinstance(it, tuple)
+                    else
+                        (it.decode(), True) if isinstance(it, bytes)
+                    else
+                        (str(it).replace('_', '-'), it)
+                    for it in v
+                ])
+
             if isinstance(v, dict):
-                attrs[k] = ValueGettersDict([(dk, ValueGetter(dv)) for dk, dv in v.items()])
+                attrs[k] = ValueGettersDict([
+                    (dk, ValueGetter(dv, force_compile=(k in ['Class', 'xClass']))) for dk, dv in v.items()]
+                )
             else:
                 attrs[k] = ValueGetter(v, force_compile=(k == 'Attrs'))
 
@@ -185,9 +205,18 @@ class Tag:
     @classmethod
     def _make_self_rendered(cls, ctx: dict, attrs: AttrsDict):
         attrs = cls._render_attrs(ctx, attrs)
+        ident_class = cls.ident_class
+        if ident_class is not None:
+            klass = attrs.get('class')
+            klass = f'{ident_class} {klass}' if klass else ident_class
+            attrs['class'] = klass
+
+        tag_name = attrs.pop('Tag', cls.tag_name)
+
         ret = RenderedTag(
             tag_class=cls,
             attrs=attrs,
+            tag=tag_name
         )
         return ret
 
@@ -352,6 +381,15 @@ class ComponentMeta(type):
         super().__init__(name, bases, dct)
         if name == 'Component':
             return
+
+        # parse props
+        if 'props' not in dct and '__init__' in dct:
+            props = {}
+            for i, p in enumerate(inspect.signature(dct['__init__']).parameters.values()):
+                if i and p.kind is p.POSITIONAL_OR_KEYWORD:
+                    props[p.name] = p.default if p.default is not p.empty else ''
+            cls.props = props
+
         template_processed = cls.__dict__.get('_template_processed', False)
         if not template_processed:
             cls._template_processed = True

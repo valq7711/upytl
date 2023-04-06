@@ -1,4 +1,5 @@
 from typing import Union, Callable, Dict, Any
+import itertools
 
 
 class AttrsDict(dict):
@@ -139,6 +140,8 @@ class ValueGetter:
                 def render(ctx: dict):
                     return eval(code_obj, None, ctx)
                 return render
+            elif isinstance(v, bytes):
+                return v.decode()
             return v
 
         render = v
@@ -168,9 +171,22 @@ class ValueGettersDict(dict):
 
     def render(self: Dict[str, ValueGetter], ctx: dict):
         return {
-            k: v.get(ctx) if isinstance(v, ValueGetter) else v
+            k.format_map(ctx): v.get(ctx) if isinstance(v, ValueGetter) else v
             for k, v in self.items()
         }
 
     def copy(self):
         return ValueGettersDict(self)
+
+
+def islice_dict(dct: dict, start: Union[str, int] = None, stop: Union[str, int] = None):
+    keys = None
+    if start is not None and not isinstance(start, int):
+        keys = [*dct]
+        start = keys.index(start)
+    if stop is not None and not isinstance(stop, int):
+        if keys is None:
+            keys = [*dct]
+        stop = keys.index(stop)
+
+    return itertools.islice(dct.items(), start, stop)
