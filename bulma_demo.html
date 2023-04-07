@@ -8,6 +8,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
     <script src="https://kit.fontawesome.com/5c105e6ebd.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <script src="upytl.js"></script>
   </head>
   <body class="">
     <div class="navbar is-primary">
@@ -128,5 +130,14 @@
         </a>
       </li>
     </ul>
+    <script type="text/x-template" id="_a880b0df-87c2-467a-8b9e-2bd4c0d7e750">
+      <div>
+        This is just a div ... but it is rendered by Vue.js!
+        <NiceNonExistingVueComponent></NiceNonExistingVueComponent>
+      </div>
+    </script>
+    <script>
+      upytl.mount_component("_a880b0df-87c2-467a-8b9e-2bd4c0d7e750")
+    </script>
   </body>
 </html>

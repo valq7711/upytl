@@ -371,6 +371,7 @@ class Page(Component):
                 h.Meta(name="viewport", content="width=device-width, initial-scale=1"): '',
                 h.Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css"): '',
                 h.Script(src="https://kit.fontawesome.com/5c105e6ebd.js", crossorigin="anonymous"): '',
+                Slot(SlotName='scripts'): '',
             },
             h.Body(
                 Class={

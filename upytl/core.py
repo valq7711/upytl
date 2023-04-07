@@ -408,7 +408,7 @@ class Component(MetaTag, metaclass=ComponentMeta):
 
     @overload
     def __init__(
-        self, *,
+        self, _: dict = None, *,
         For=None, If=None, Elif=None, Else=None,
         Class=None, xClass=None,
         Style=None, xStyle=None,
@@ -419,7 +419,10 @@ class Component(MetaTag, metaclass=ComponentMeta):
         ...
 
     @set_info
-    def __init__(self, **attrs):
+    def __init__(self, _: dict = None, **attrs):
+        if _ is not None:
+            _.update(attrs)
+            attrs = _
         self.props_set = set()
         super().__init__(**attrs)
         self.slots = set()
@@ -526,6 +529,15 @@ class Component(MetaTag, metaclass=ComponentMeta):
         to extend the context of own template.
         """
         return props_rendered
+
+
+class _GenTag:
+    def __getattr__(self, name: str) -> Type[Tag]:
+        cls = type(name, (Tag,), {'tag_name': name.replace('_', '-')})
+        return cls
+
+
+gtag = _GenTag()
 
 
 class GenericComponent(Tag):

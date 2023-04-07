@@ -1,5 +1,6 @@
 from . import html
-from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL, Template
+from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL, Template, gtag
+from .xtemplate import XTemplate
 
 
 __all__ = (
@@ -12,6 +13,8 @@ __all__ = (
     'UHelper',
     'UPYTL',
     'Template',
+    'XTemplate',
+    'gtag',
 )
 
 __author__ = "Kucherov Valery <valq7711@gmail.com>"
