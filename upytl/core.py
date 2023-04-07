@@ -557,9 +557,8 @@ class SlotsEnum(Enum):
     def __init__(self):
         self._value_ = SlotTemplateFactory(self.name)
 
-    @property
-    def slot(self) -> Slot:
-        return Slot(SlotName=self.value.slot)
+    def slot(self, **kw) -> Slot:
+        return Slot(SlotName=self.value.slot, **kw)
 
     def __call__(self, **kw):
         return self.value(**kw)
