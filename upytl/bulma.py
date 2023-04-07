@@ -1,14 +1,14 @@
 from enum import Enum, auto
 
 from upytl import (
-    Template, Component, Tag as UTag, html as h, Slot, SlotTemplate
+    Template, Component, Tag as UTag, html as h, Slot, SlotTemplate, SlotsEnum
 )
 from upytl.helpers import islice_dict
 
 
-class ModifierTypeEnum(Enum):
+class ModifierTypeEnum(str, Enum):
 
-    def _generate_next_value(self, name: str, *args):
+    def _generate_next_value_(name: str, *args):
         return f"is-{name.lower().replace('_', '-')}"
 
 
@@ -353,6 +353,9 @@ class MenuSection(Component):
 
 
 class Page(Component):
+    class S(SlotsEnum):
+        scripts = ()
+        default = ()
 
     def __init__(self, title: str = 'UPYTL Bulma Page', fixed_navbar: str = '', **kw):
         '''
@@ -371,7 +374,7 @@ class Page(Component):
                 h.Meta(name="viewport", content="width=device-width, initial-scale=1"): '',
                 h.Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css"): '',
                 h.Script(src="https://kit.fontawesome.com/5c105e6ebd.js", crossorigin="anonymous"): '',
-                Slot(SlotName='scripts'): '',
+                S.scripts.slot: '',
             },
             h.Body(
                 Class={

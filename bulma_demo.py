@@ -5,11 +5,11 @@ import upytl.bulma as bm
 
 t = {
     bm.Page(title='{page_title}'): {
-        SlotTemplate(Slot='scripts'): {
+        bm.Page.S.scripts(): {
             h.Script(src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"): '',
             h.Script(src='upytl.js'): ''
         },
-        SlotTemplate(Slot='default'): {
+        bm.Page.S.default(): {
             bm.NavBase(Class='is-primary'): {
                 SlotTemplate(Slot='brand'): {
                     bm.NavbarItem(): 'UPYTL'

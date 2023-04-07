@@ -2,13 +2,13 @@ import io
 import re
 import functools
 from enum import Enum
-from types import SimpleNamespace, CodeType
+from types import SimpleNamespace, CodeType, FunctionType
 import inspect
 import threading
 
 from typing import Union, Callable, Tuple, List, Iterable, overload, Type, Dict, TypeVar, Optional
 
-from .helpers import AttrsDict, ValueGetter, ValueGettersDict
+from upytl.helpers import AttrsDict, ValueGetter, ValueGettersDict
 
 
 AUTO_TAG_NAME = object()
@@ -542,6 +542,27 @@ class _GenTag:
 
 
 gtag = _GenTag()
+
+
+class SlotTemplateFactory:
+    def __init__(self, slot: str):
+        self.slot = slot
+
+    def __call__(self, **kw) -> SlotTemplate:
+        kw['Slot'] = self.slot
+        return SlotTemplate(**kw)
+
+
+class SlotsEnum(Enum):
+    def __init__(self):
+        self._value_ = SlotTemplateFactory(self.name)
+
+    @property
+    def slot(self) -> Slot:
+        return Slot(SlotName=self.value.slot)
+
+    def __call__(self, **kw):
+        return self.value(**kw)
 
 
 class GenericComponent(Tag):

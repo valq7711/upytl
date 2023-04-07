@@ -1,5 +1,5 @@
 from . import html
-from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL, Template, gtag
+from .core import Tag, MetaTag, Component, Slot, SlotTemplate, UHelper, UPYTL, Template, gtag, SlotsEnum
 from .xtemplate import XTemplate
 
 
@@ -15,6 +15,7 @@ __all__ = (
     'Template',
     'XTemplate',
     'gtag',
+    'SlotsEnum',
 )
 
 __author__ = "Kucherov Valery <valq7711@gmail.com>"
