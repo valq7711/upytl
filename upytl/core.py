@@ -106,7 +106,7 @@ class Tag:
 
     @overload
     def __init__(
-        self, *,
+        self, _: dict = None, *,
         For=None, If=None, Elif=None, Else=None,
         Class=None, xClass=None,
         Style=None, xStyle=None,
@@ -118,10 +118,14 @@ class Tag:
         ...
 
     @set_info
-    def __init__(self, **attrs):
+    def __init__(self, _: dict = None, **attrs):
         """
         xClass, xStyle, xData mean eXtend Class or Style or Data
         """
+        if _ is not None:
+            _.update(attrs)
+            attrs = _
+
         if self.attrs is not None:
             attrs = dict(self.attrs, **attrs)
 

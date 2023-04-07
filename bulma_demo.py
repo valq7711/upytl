@@ -23,7 +23,7 @@ t = {
             XTemplate(): {
                 h.Div(): {
                     h.Text(): 'This is just a div ... but it is rendered by Vue.js!',
-                    gtag.NiceNonExistingVueComponent(): ''
+                    gtag.NiceNonExistingVueComponent({'@click': 'some_meth'}, Class='class'): ''
                 }
             }
         }
