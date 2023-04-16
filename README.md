@@ -36,8 +36,8 @@ print(rendered)
 - `If`-`Elif`-`Else`
 - component selector `Is`
 - custom components with `Slot`(s)
-- pythonic component pre-processor with `get_context()` function
-
+- pythonic component pre-processor with `get_context()`
+- template factory convenience method `template_factory()`
 
 ## Overview
 UPYTL supports all standard HTML `tags` and `tag attributes` as standard and as can be seen from the above example the syntax for defining `tags` and `attributes` is ```h.<tag-name capitalised>(<attribute capitalised>, <attribute capitalised>, ... ): '',``` 
@@ -249,8 +249,10 @@ class HTMLPage(Component):
             },
         },
     }
+```
 
 By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. If we wanted to use our recently developed `Notify` component we would create another 'named slot` in our `Page` component.
+
 ```python
   ...
             h.Body():{
@@ -263,9 +265,9 @@ By utilizing `Slots` in our components we immediatley have a components that pro
                         Class='{footer_class}',
                         Style={'margin':'30px', 'font-family':'monospace', 'font-size':'20px'}
 ...
+```
 
 Including this component now in any template will render the default values of the `Slot's`
-
 
 ### Better IDE Support
 Defining component attributes via `props` is suitable in most cases.
@@ -673,8 +675,10 @@ The `footer will atumatically be displyed as defined in the `HTMPage` component.
 
 #### We leave it up to you as an excercise to design and implement the `NavBarItem` component.
 
-## Next Steps
+## Conclusion
 The real power of `UPYTL` is the ability to build re-useable compoents. We strongly reccomend adding all new componenets you develop to a `component library` file which can easliy be uploaded to PyPI and shared amongst team members, colleques and any other collaborators.
+
+UPYTL provides all the tools needed to develop fully functional, flexible and responsive  `DRY - Dont Repeat Yourself` applications. 
 
 
 
