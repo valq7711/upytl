@@ -3,9 +3,9 @@
 
 UPYTL is a lightweight, fully fucntional, self contained python package, designed to enable rapid generation and rendering of feature rich context driven `HTML` pages in a structured, Pythonic manner totally eliminating code repetition.
 
-The `Slot`, `Template`, `Component` architecture, (similar in both functionality AND flexibilty to their `Vue.Js` equivalents), allows development of multiple, re-usable, self contained components that can be used throughout your project with no risk whatsoever of `DOM` contamination or conflicts.
+The `Slot`, `Template`, `Component` architecture, (similar in both functionality AND flexibilty to their `Vue.Js` equivalents), allows development of multiple, re-useable, self contained components that can be used throughout your project or across multiple projects with no risk whatsoever of `DOM` contamination or conflicts.
 
-UPYTL can be used standalone or easily integrated into any `context driven framework` in order to render stunning, feature rich, HTML pages dynamically. 
+UPYTL can be used standalone or easily integrated into any `context driven application framework` in order to render stunning, feature rich, HTML pages dynamically. 
 
 ## Installation And Usage
 `python -m pip install upytl`
@@ -38,8 +38,9 @@ print(rendered)
 - custom components with `Slot`(s)
 - pythonic component pre-processor with `get_context()` function
 
-## General
-UPYTL supports all standard HTML `tags` and `tag attributes` as standard and as can be seen from the above example the syntax for defining `tags` and `attributes` is ```h.<tag-name capitalised>(<attribute capatilised>, <attribute capatilised>, ... ): '',``` 
+
+## Overview
+UPYTL supports all standard HTML `tags` and `tag attributes` as standard and as can be seen from the above example the syntax for defining `tags` and `attributes` is ```h.<tag-name capitalised>(<attribute capitalised>, <attribute capitalised>, ... ): '',``` 
 
 The `default` render-behaviour for `attributes` is `str.format()`, so you can
 ```Python
@@ -73,8 +74,8 @@ So in the above example if `allow_submit` is falsy i.e. `not allow_submit` is `T
 
 ## `For`-loop, `If`-`Elif`-`Else`
 
-UPYTL provides a number of `special` attributes namely : `For`, `If`, `Elif`, `Else`. Their values are always treated as python expressions except for `Else` - its value is ignored.
-Also note that `For`-syntax is a bit lighter when compared to pure python.
+UPYTL provides a number of `special` attributes namely : `For`, `If`, `Elif`, `Else`. Their values are always treated as `python` expressions except for `Else` - its value is ignored.
+Also note that `For`-syntax is a bit lighter when compared to pure python `for`.
 
 ```Python
 t = {
@@ -85,7 +86,6 @@ t = {
     }
 }
 ```
-
 ##### Note:- the use of the `h.Template()` tag above. This is the recommended way to declare conditional `same level` tags
 
 ```HTML
@@ -105,7 +105,6 @@ t = {
   This is #4 div
 </div>
 ```
-
 
 ## `Is`-selector
 
@@ -132,13 +131,16 @@ t = {
 ```
 
 ## Components
-Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous code block to a specifc `tag` or element of another component. In order to better understnd the power and felxibilty of `components` lets take a look at a real life use case:
+Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous code block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
 
-One of the most important functions of any interactive application is the ability to produce notifications of events and request actions from the end user. This can range from requesting login credentials (if the user is not logged in) to notificaiton of invalid or failed verification of payment details. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications produced by our application without the need to code seperate code blocks for each condition.
+One of the most important functions of any interactive application is the ability to provide notifications of events and request actions from the end user. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications of any state with any message produced by our application without the need to code seperate code blocks for each condition.
 
 ## Custom Components - Markup Extension
 
 ```Python
+
+## my_components.py
+
 from upytl import Component, UPYTL, html as h
 
 class Notify(Component):
@@ -213,10 +215,61 @@ t = {
 </div>
 ```
 
+### Typical `Slot` use case
+One of the most common uses for `Slots` that demonstrates the power of combining `Slots` and `Components` is a typical `Page`. As we will be usng any number of `Pages` in our app lets define a simple re-useable, configurable `HTMLPage` componenet.
+
+```python
+
+## components.py
+## simple customisable page component
+
+class HTMLPage(Component):
+    props = dict(
+        footer_class='page-footer',
+        page_title="This page has no title :(, but it's fixable - just `HTMLPage(page_title='awesome')`"
+    )
+    template = {
+        h.Html(): {
+            h.Head():{
+                h.Title(): '[[page_title]]',
+                h.Meta(charset=b'utf-8'):'',
+            },
+            h.Body():{
+                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
+                Slot(SlotName=b'content'):{h.Div(): '[there is no default content]'},
+                Slot(SlotName=b'footer'):{
+                    h.Div(
+                        Class='{footer_class}',
+                        Style={'margin':'30px', 'font-family':'monospace', 'font-size':'20px'}
+                    ): {
+                        h.Text(): 'Created using ',
+                        h.A(href={'URL()'}): 'UPYTL',
+                    }
+                },
+            },
+        },
+    }
+
+By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. If we wanted to use our recently developed `Notify` component we would create another 'named slot` in our `Page` component.
+```python
+  ...
+            h.Body():{
+                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
+                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
+                Slot(SlotName=b'notify'):{h.Div(): '[there is no default nav]'},
+                Slot(SlotName=b'content'):{h.Div(): '[there is no default content]'},
+                Slot(SlotName=b'footer'):{
+                    h.Div(
+                        Class='{footer_class}',
+                        Style={'margin':'30px', 'font-family':'monospace', 'font-size':'20px'}
+...
+
+Including this component now in any template will render the default values of the `Slot's`
+
 
 ### Better IDE Support
-Defining component attributes via `props` is suitable for most cases.
-For more complex cases we can use `__init__` and `SlotsEnum`
+Defining component attributes via `props` is suitable in most cases.
+For more complex cases however, we can use `__init__` and `SlotsEnum`
 
 ```python
 from upytl import Component, UPYTL, html as h, Slot, SlotsEnum
@@ -248,7 +301,7 @@ t = {
     # By default, content passed to the component goes into the `default` slot (if there is one)
     Notify(): 'All good',
 
-    # If component has more than one slot, we should specify in which slot we want to insert
+    # If the component has more than one slot, we should specify the slot we wish to insert our content into.
     Notify(status='error'): {
         Notify.S.title(): 'Error',
         Notify.S.default(): 'Something went wrong!'
@@ -272,7 +325,8 @@ t = {
 ```
 
 ## Component Context Helper - get_context()
-Occasionally it is necessary provide more complex `manipulations` at the component level than `For If, Eleif, Else ...`. For these situations UPYYTL has a convenience fucntoon that allows us to perform all of the above and more.
+Occasionally it is necessary for more complex `logic` at the component level than tha standard `For If, Eleif, Else ...`. For these situations UPYYTL has a convenience method that allows us to perform complex functions using standard `python` fucntions or even using functionality from imported external libraries. In fact the `For If, Eleif, Else ...` logic needed by the component could be moved completely into the `get_context method` with the same result.
+
 ```Python
 from upytl import Component, UPYTL, html as h
 
@@ -286,6 +340,7 @@ class Notify(Component):
     template = {
         h.Div(Class='notification-{status}'): '[[ notification ]]'
     }
+    
     def get_context(self, rprops):
         if rprops['status'] == 'error':
             notification = rprops['note'].upper()
@@ -314,15 +369,148 @@ t = {
 </div>
 ```
 
+## The Template Factory - template_factory()
+The `template_factory` is another convenience method which allows recursive use of the same component in a template. In order to demonstrate this letst create a simple component 
+
+```python
+class TreeView(Component):
+    """
+    This component demonstrates the use of the `template_factory` method
+    which allows recursive use of a single component in its template.
+    """
+    props = dict(
+        tree=[],
+        depth=0
+    )
+
+    @staticmethod
+    def template_factory(cls):
+        TreeView = cls
+        return {
+            h.Div(For='it in tree', Style={'margin-left': {'f"{depth * 4}px"'} }): {
+                h.Div(): '[[ it["name"] ]]',
+                TreeView(If='"nodes" in it', depth={'depth+1'}, tree={'it["nodes"]'}): ''
+            },
+        }
+```
+Now lets use it in a simple template
+```python
+t = {
+    h.Div():{
+        h.H4():'Tree-view example:',
+        TreeView(tree={'tree'}):{}
+    }
+}
+
+## Set up our `Context` with the values to render
+
+# Define context
+
+def URL():
+    return 'https://github.com/valq7711/upytl'
+
+# Keep in mind, that context (ctx) passed to render upytl.render
+# is inaccessible in custom components, since components are similar to imported functions
+# and component props and slots are similar to function arguments.
+# So there is an optional `global_ctx` argument, which can be passed to UPYTL
+# to provide access to desired stuff from anywhere including custom components
+
+upytl = UPYTL(global_ctx=dict(URL=URL))
+
+ctx = dict(
+    tree=[
+        {
+            'name': 'Top',
+            'nodes': [
+                {'name': 'child-1'},
+                {
+                    'name': 'child-2',
+                    'nodes': [
+                        {'name': '2-child-1'},
+                        {'name': '2-child-2'},
+                        {
+                            'name': '2-child-3',
+                            'nodes': [
+                                {'name': '2-child-3/#1'},
+                                {'name': '2-child-3/#2'},
+                            ]
+                        },
+                    ]
+                },
+                {'name': 'child-3'},
+            ]
+        },
+    ]
+)
+
+rendered = upytl.render(tree, ctx, indent=2)
+
+print(rendered)
+```
+
+```HTML
+<!DOCTYPE html>
+<div>
+  <h4>
+    Tree-view example:
+  </h4>
+  <div style="margin-left:0px">
+    <div>
+      Top
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        child-1
+      </div>
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        child-2
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          2-child-1
+        </div>
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          2-child-2
+        </div>
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          2-child-3
+        </div>
+        <div style="margin-left:12px">
+          <div>
+            2-child-3/#1
+          </div>
+        </div>
+        <div style="margin-left:12px">
+          <div>
+            2-child-3/#2
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        child-3
+      </div>
+    </div>
+  </div>
+</div>
+```
+
 ## The Script Tag
 Including `JS` or `Jquery` functionality in our components is facilitated by the use of the `h.Script` tag.
 
-A classic example or use case would be the `navbar burger` functionality required by most html pages in order to make them responsive.
+A classic example or use case would be the `navbar burger` functionality required by most contemporary html pages in order to make them `responsive` or moblie friendly.
 
 ```python
 ## Example Navbar Component using Bulma
 
-from . my_componets import NavBarItem
+from . my_components import NavBarItem
  
 class NavBar(Component):
     props = dict(
@@ -386,7 +574,7 @@ class NavBar(Component):
         }
     }
 ```
-Provided that the appropriate `NavBarItem` component is available this component when included in any template render as expected and have a fully functional navbar-burger button which will either show or hide the navbar in responsive mode.
+Provided that the appropriate `NavBarItem` component is available this component will render as expected and have a fully functional collapsible navbar-burger button which will either show or hide the navbar in responsive mode.
 
 #### make sure you have the appropriate JQuery library loaded in the parent template.
 
@@ -395,9 +583,9 @@ The other thing to note is the use of `funny attributes` as in ```**{'aria-label
 ## Putting it all together
 Now that we have seen power of `Components` and how they interact with `Templates` and how both can facilitate the use of `Slots` to provide maximum flexibilty and functionality lets take a look at a typical use case.
 
-Our application will consist of a number of `Pages`. Each `Page` will consist of a number of distinct `Components`. In our case lets have a Header/Navbar, Notification area, a Body (which dsiplays the page content) and a footer. Pretty much that standard anatomy of a page.
+Our application will consist of a number of `Pages`. Each `Page` will consist of a number of distinct `Components`. In our case lets have a Header/Navbar, Notification area, a Body (which dsiplays the page content) and a footer. Pretty much the standard anatomy of a page.
 
-So far we have created a `Notify` component, a `NavBar` component and the `Body` or `Content` will be whatever we want it to be. So lets create a HTLPage componet with uses all the above.
+So far we have created a `Notify` component, a `NavBar` component and the `Body` or `Content` will be whatever we want it to be. So lets create a HTMLPage component which ties all this together.
 
 ```Python
 ## file my_components.py
@@ -447,7 +635,7 @@ class HTMLPage(Component):
     }
 ```
 
-Here we define out HTMLPage component which we can use throughout our application givng us complete uniformity of "look and feel" irrespectrive of content being displyed. For the sake of simplicity we have defined the footer in the page component but equally as well we could have created a seperate `PageFooter` component.
+Here we define out HTMLPage component which we can use throughout our application givng us complete uniformity or "look and feel" irrespectrive of content being displyed. For the sake of simplicity we have defined the footer in the page component but equally as well we could have created a seperate `PageFooter` component.
 
 
 and the corresponding template:
