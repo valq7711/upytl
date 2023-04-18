@@ -36,11 +36,19 @@ print(rendered)
 - `If`-`Elif`-`Else`
 - component selector `Is`
 - custom components with `Slot`(s)
-- pythonic component pre-processor with `get_context()`
-- template factory convenience method `template_factory()`
+- extending component context via `get_context()`
+- recursive component templates using `template_factory()`
 
 ## Overview
-UPYTL supports all standard HTML `tags` and `tag attributes` as standard and as can be seen from the above example the syntax for defining `tags` and `attributes` is ```h.<tag-name capitalised>(<attribute capitalised>, <attribute capitalised>, ... ): '',``` 
+UPYTL supports all standard HTML `tags` and `tag attributes` as standard and as can be seen from the above example it uses native python `dict` for defining template structure, where `dict`-keys are used to hold `tags` with their `attributes` and `dict`-values are used to hold tag-content.
+So the general syntax is:
+```python
+some_template = {
+    SomeTagClass(attr1='attr-value', attr2='attr-value', ...): {
+        AnotherTagClass(attr1='attr-value', ...): 'text content'
+    }
+}
+```
 
 The `default` render-behaviour for `attributes` is `str.format()`, so you can
 ```Python
@@ -86,7 +94,7 @@ t = {
     }
 }
 ```
-##### Note:- the use of the `h.Template()` tag above. This is the recommended way to declare conditional `same level` tags
+##### Note: the use of the `h.Template()` tag above - `h.Template()` is meta-tag, it is not rendered in the output and is intended to organize template logic. 
 
 ```HTML
 <div>
@@ -131,7 +139,7 @@ t = {
 ```
 
 ## Components
-Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous code block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
+Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
 
 One of the most important functions of any interactive application is the ability to provide notifications of events and request actions from the end user. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications of any state with any message produced by our application without the need to code seperate code blocks for each condition.
 
@@ -160,11 +168,12 @@ t = {
     Notify(note='Something went wrong!', status='error'): None,
 }
 ````
-The first thing to note is that our component uses `props = { ... }`. If no `props` are passed to the component we render using `default` values of the props.
-
+The first thing to note is that our component uses `props = { ... }` - this is the simple way to define component-specific arguments. 
+##### Note: Components are rendered in its own context defined by props. 
+If no `props` are passed to the component we render using `default` values of the props.
 This allows us to design our component with default characteristics and attributes that will be `overriddedn` by any valid `props` passed in.
 
-The other thing to note is the difference in syntax between ```'{ ... }'``` and ```'[[ ... ]]'``` and their uses.
+The other thing to note is the difference in syntax between `'{ ... }'` and `'[[ ... ]]'` and their uses. We use `[[ ... ]]` delimiters in text-body to avoid overlapping with front-end (e.g. vue.js) templates, that use `{{ ... }}`.
 
 ```HTML
 <div class="notification-info">
@@ -182,7 +191,7 @@ In order to make our `custom component` even more `flexible` we can use `Slots`
 
 ### Slots
 
-Slots are a convenient way of passing through specific properties to components whist maintaining component attributes if required.
+Slots are a convenient way of passing content to components through specific tags (slots).
 
 ```Python
 from upytl import Component, UPYTL, html as h, Slot
@@ -225,25 +234,26 @@ One of the most common uses for `Slots` that demonstrates the power of combining
 
 class HTMLPage(Component):
     props = dict(
+        page_title="Some Nice Title"
         footer_class='page-footer',
-        page_title="This page has no title :(, but it's fixable - just `HTMLPage(page_title='awesome')`"
     )
     template = {
         h.Html(): {
             h.Head():{
                 h.Title(): '[[page_title]]',
                 h.Meta(charset=b'utf-8'):'',
+                Slot(SlotName='head_extra'): '',  # to allow to pass css/scripts 
             },
             h.Body():{
-                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
-                Slot(SlotName=b'content'):{h.Div(): '[there is no default content]'},
-                Slot(SlotName=b'footer'):{
+                Slot(SlotName='nav'): {h.Div(): 'there is no default nav'},
+                Slot(SlotName='content'): {h.Div(): 'there is no default content'},
+                Slot(SlotName='footer'): {
                     h.Div(
                         Class='{footer_class}',
                         Style={'margin':'30px', 'font-family':'monospace', 'font-size':'20px'}
                     ): {
                         h.Text(): 'Created using ',
-                        h.A(href={'URL()'}): 'UPYTL',
+                        h.A(href={'URL()'}): 'UPYTL',  # assuming that `URL()` is accessible globally
                     }
                 },
             },
@@ -251,22 +261,7 @@ class HTMLPage(Component):
     }
 ```
 
-By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. If we wanted to use our recently developed `Notify` component we would create another 'named slot` in our `Page` component.
-
-```python
-  ...
-            h.Body():{
-                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
-                Slot(SlotName=b'nav'):{h.Div(): '[there is no default nav]'},
-                Slot(SlotName=b'notify'):{h.Div(): '[there is no default nav]'},
-                Slot(SlotName=b'content'):{h.Div(): '[there is no default content]'},
-                Slot(SlotName=b'footer'):{
-                    h.Div(
-                        Class='{footer_class}',
-                        Style={'margin':'30px', 'font-family':'monospace', 'font-size':'20px'}
-...
-```
-
+By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. 
 Including this component now in any template will render the default values of the `Slot's`
 
 ### Better IDE Support
