@@ -138,12 +138,41 @@ t = {
 </div>
 ```
 
+## Semantic Custom Tags
+
+If you've dealt with CSS frameworks (like Bulma) you've probably noticed that a tag's behavior is mostly determined by its class, not the tag itself.
+For example, in Bulma `class='navbar-item'` can be set on `a` or `div` tag. For these cases UPYTL supports the following feature:
+```python
+from upytl import Tag
+
+class NavbarItem(Tag):
+    tag_name ='a'  # default tag
+    ident_class = 'navbar-item'  # identity class  
+    
+```
+
+Now you can use `NavbarItem` as regular tag:
+
+```python
+t = {
+  NavbarItem(): '',
+  NavbarItem(Class='has-dropdown is-hoverable', Tag='div'): '',
+}
+```
+##### Note: `ident_class` cannot be overridden or removed, but we can redefine tag name instead - notice the use of one else special attribute `Tag` 
+
+```html
+<a class="navbar-item"></a>
+<div class="navbar-item has-dropdown is-hoverable"></div>
+```
+
+
 ## Components
 Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
 
 One of the most important functions of any interactive application is the ability to provide notifications of events and request actions from the end user. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications of any state with any message produced by our application without the need to code seperate code blocks for each condition.
 
-## Custom Components - Markup Extension
+## Custom Components
 
 ```Python
 
@@ -224,6 +253,79 @@ t = {
 </div>
 ```
 
+The above is very simple single-slot component, but what if we want to have more than one slot?
+
+```Python
+from upytl import Component, UPYTL, html as h, Slot
+
+class Notify(Component):
+    props = {
+        'status': 'info',
+    }
+
+    template = {
+        h.Div(Class='notification-{status}'): {
+
+            # this is `default` slot, i.e. this is shortcut for `Slot(SlotName='default')`
+            Slot(): 'If you see this, please open an issue',
+
+            # Slots don't have to be at the same level
+            h.Div(Class='buttons'): {
+                Slot(SlotName='buttons'): {
+                    h.Button(): 'OK'
+                }
+            }
+        }
+    }
+
+
+t = {
+
+    Notify(status='error'): {
+        # to pass content to a component slot we should wrap the content in `SlotTemplate`-tag 
+        # and specify target slot via `Slot`-attribute (matching `SlotName` attribute of the `Slot`)
+    
+        # for `default` slot we can omit `Slot`-attribute
+        SlotTemplate(): 'Something went wrong!',
+        
+        SlotTemplate(Slot='buttons'): {
+            h.Button(): 'Cancel',
+            h.Button(): 'Try again',
+            h.Button(): 'So what?',
+        }
+    },
+
+    # if we want to pass the content for only `default` slot, we do not need to use `SlotTemplate`-wrapper
+    Notify(): 'All good',
+}
+```
+
+```html
+<div class="notification-error">
+  Something went wrong!
+  <div class="buttons">
+    <button>
+      Cancel
+    </button>
+    <button>
+      Try again
+    </button>
+    <button>
+      So what?
+    </button>
+  </div>
+</div>
+
+<div class="notification-info">
+  All good
+  <div class="buttons">
+    <button>
+      OK
+    </button>
+  </div>
+</div>
+```
+
 ### Typical `Slot` use case
 One of the most common uses for `Slots` that demonstrates the power of combining `Slots` and `Components` is a typical `Page`. As we will be usng any number of `Pages` in our app lets define a simple re-useable, configurable `HTMLPage` componenet.
 
@@ -263,6 +365,17 @@ class HTMLPage(Component):
 
 By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. 
 Including this component now in any template will render the default values of the `Slot's`
+
+```
+t = {
+    HTMLPage(): {
+        
+    }
+    
+}
+```
+
+
 
 ### Better IDE Support
 Defining component attributes via `props` is suitable in most cases.
