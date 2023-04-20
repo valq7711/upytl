@@ -35,6 +35,7 @@ print(rendered)
 - `For`-loop
 - `If`-`Elif`-`Else`
 - component selector `Is`
+- semantic custom tags
 - custom components with `Slot`(s)
 - extending component context via `get_context()`
 - recursive component templates using `template_factory()`
@@ -171,8 +172,6 @@ t = {
 Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
 
 One of the most important functions of any interactive application is the ability to provide notifications of events and request actions from the end user. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications of any state with any message produced by our application without the need to code seperate code blocks for each condition.
-
-## Custom Components
 
 ```Python
 
