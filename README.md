@@ -35,6 +35,7 @@ print(rendered)
 - `For`-loop
 - `If`-`Elif`-`Else`
 - component selector `Is`
+- semantic custom tags
 - custom components with `Slot`(s)
 - extending component context via `get_context()`
 - recursive component templates using `template_factory()`
@@ -138,12 +139,39 @@ t = {
 </div>
 ```
 
+## Semantic Custom Tags
+
+If you've dealt with CSS frameworks (like Bulma) you've probably noticed that a tag's behavior is mostly determined by its class, not the tag itself.
+For example, in Bulma `class='navbar-item'` can be set on `a` or `div` tag. For these cases UPYTL supports the following feature:
+```python
+from upytl import Tag
+
+class NavbarItem(Tag):
+    tag_name ='a'  # default tag
+    ident_class = 'navbar-item'  # identity class  
+    
+```
+
+Now you can use `NavbarItem` as regular tag:
+
+```python
+t = {
+  NavbarItem(): '',
+  NavbarItem(Class='has-dropdown is-hoverable', Tag='div'): '',
+}
+```
+##### Note: `ident_class` cannot be overridden or removed, but we can redefine tag name instead - notice the use of one else special attribute `Tag` 
+
+```html
+<a class="navbar-item"></a>
+<div class="navbar-item has-dropdown is-hoverable"></div>
+```
+
+
 ## Components
 Components form the backbone of the underlying design philosophy behind `UPYTL`. A UPYTL component can be anything from a fully functioning autonomous block to a specifc `tag` or element of another component. In order to better understnd the power and flexability of `components` lets take a look at a real life use case:
 
 One of the most important functions of any interactive application is the ability to provide notifications of events and request actions from the end user. The html `notification` class is commonly used for this purpose so let us take a look at how we can create a `multi-purpose` custom notification `component` that can be used to process any notifications of any state with any message produced by our application without the need to code seperate code blocks for each condition.
-
-## Custom Components - Markup Extension
 
 ```Python
 
@@ -224,6 +252,322 @@ t = {
 </div>
 ```
 
+The above is very simple single-slot component, but what if we want to have more than one slot?
+
+```Python
+from upytl import Component, UPYTL, html as h, Slot
+
+class Notify(Component):
+    props = {
+        'status': 'info',
+    }
+
+    template = {
+        h.Div(Class='notification-{status}'): {
+
+            # this is `default` slot, i.e. this is shortcut for `Slot(SlotName='default')`
+            Slot(): 'If you see this, please open an issue',
+
+            # Slots don't have to be at the same level
+            h.Div(Class='buttons'): {
+                Slot(SlotName='buttons'): {
+                    h.Button(): 'OK'
+                }
+            }
+        }
+    }
+
+
+t = {
+
+    Notify(status='error'): {
+        # to pass content to a component slot we should wrap the content in `SlotTemplate`-tag 
+        # and specify target slot via `Slot`-attribute (matching `SlotName` attribute of the `Slot`)
+    
+        # for `default` slot we can omit `Slot`-attribute
+        SlotTemplate(): 'Something went wrong!',
+        
+        SlotTemplate(Slot='buttons'): {
+            h.Button(): 'Cancel',
+            h.Button(): 'Try again',
+            h.Button(): 'So what?',
+        }
+    },
+
+    # if we want to pass the content for only `default` slot, we do not need to use `SlotTemplate`-wrapper
+    Notify(): 'All good',
+}
+```
+
+```html
+<div class="notification-error">
+  Something went wrong!
+  <div class="buttons">
+    <button>
+      Cancel
+    </button>
+    <button>
+      Try again
+    </button>
+    <button>
+      So what?
+    </button>
+  </div>
+</div>
+
+<div class="notification-info">
+  All good
+  <div class="buttons">
+    <button>
+      OK
+    </button>
+  </div>
+</div>
+```
+
+### Better IDE Support
+Defining component attributes via `props` is suitable in most cases.
+For more complex cases however, we recommend to use `__init__` and `SlotsEnum`
+
+```python
+from upytl import Component, UPYTL, html as h, Slot, SlotsEnum
+
+class Notify(Component):
+
+    # `SlotsEnum` provides autocomplete when using the component,
+    # i.e by typing `Notify.S.` we can get which slots component has
+    class S(SlotsEnum):
+        default = ()
+        buttons = ()
+
+    # now we will see that this component has `status` property with default 'info' and docstring as well!
+    def __init__(self, status='info', **kw):
+        '''This component is rendered as `<div class='notification-{status}>`
+        Args:
+            status: info | warning | error
+        '''
+        # do not forget to init base class
+        super().__init__(status=status, **kw)  
+
+    template = {
+        h.Div(Class='notification-{status}'): {
+        
+            # to define slot use `S.<slot_name>.slot()`
+            S.default.slot(): 'If you see this, please open an issue',
+
+            h.Div(Class='buttons'): {
+                S.buttons.slot(): {
+                    h.Button(): 'OK'
+                }
+            }
+        }
+    }
+
+
+t = {
+    Notify(status='error'): {
+    
+        # Notice the difference:
+        # - `S.<slot_name>.slot():` when *defining* slot in the component
+        # - `<component>.S.<slot_name>():` when *using* component 
+        
+        Notify.S.default(): 'Something went wrong!',
+        Notify.S.buttons(): {
+            h.Button(): 'Cancel',
+            h.Button(): 'Try again',
+            h.Button(): 'So what?',
+        }
+    },
+
+    Notify(): 'All good',
+}
+```
+
+## Component Context Helper - `get_context()`
+Occasionally it is necessary for more complex `logic` at the component level than tha standard `If, Eleif, Else ...`. For these situations UPYTL has a convenience method that allows us to check/modify passed properties or/and extend component context with computed/derived ones 
+by perform complex functions using standard `python` fucntions or even using functionality from imported external libraries. 
+
+```Python
+from upytl import Component, UPYTL, html as h
+
+class Notify(Component):
+    props = {
+        'note': 'If you see this, please open an issue',
+        'status': 'info',
+    }
+
+    template = {
+        h.Div(Class='notification-{status}'): '[[ notification ]]'
+    }
+    
+    def get_context(self, rprops: dict) -> dict:
+        '''Return extended context.
+        
+        Args:
+          rprops: A dict of rendered props
+        '''
+        if rprops['status'] == 'error':
+            notification = rprops['note'].upper()
+        else:
+            notification = rprops['note']
+        
+        rprops['notification'] = notification
+        return rprops
+
+
+t = {
+    Notify(): None,
+    Notify(note='Today is Monday :('): None,
+    Notify(note='Something went wrong!', status='error'): None,
+}
+````
+
+```HTML
+<div class="notification-info">
+  If you see this, please open an issue
+</div>
+<div class="notification-info">
+  Today is Monday :(
+</div>
+<div class="notification-error">
+  SOMETHING WENT WRONG!
+</div>
+```
+
+
+## The Template Factory - `template_factory()`
+The `template_factory` is another convenience method which allows recursive use of the same component in a template. In order to demonstrate this letst create a simple component 
+
+```python
+class TreeView(Component):
+    """
+    This component demonstrates the use of the `template_factory` method
+    which allows recursive use of a single component in its template.
+    """
+    props = dict(
+        tree={},
+        depth=0
+    )
+
+    @staticmethod
+    def template_factory(cls):
+        TreeView = cls
+        return {
+            h.Div(For='name, content in tree.items()', Style={'margin-left': '{ident_px}'}): {
+                h.Template(If='isinstance(content, dict)'): {
+                    h.Div(): '[[ name ]] :',
+                    TreeView(depth={'depth + 1'}, tree={'content'}): '',
+                },
+                h.Template(Else=''):{
+                    h.Div(): '[[ name ]] : [[ content ]]',
+                }
+            },
+        }
+
+    def get_context(self, rprops: dict) -> dict:
+        rprops['ident_px'] = f"{rprops['depth'] * 4}px"
+        return rprops
+```
+
+Now lets use it in a simple template
+
+```python
+t = {
+    h.Div():{
+        h.H4():'Tree-view example:',
+        TreeView(tree={'tree'}): ''
+    }
+}
+```
+
+Set up our `Context` with the values to render
+
+```python
+ctx = dict(
+    tree={
+        'top': {
+            'leaf': 'leaf',
+            'node-1': {
+                'leaf-1': 'node-1/leaf-1',
+                'leaf-2': 'node-1/leaf-2',
+                'sub_node': {
+                    'leaf-1': 'node-1/sub_node/leaf-1',
+                    'leaf-2': 'node-1/sub_node/leaf-2',
+                }
+            },
+            'node-2': {
+                'leaf': 'node-2/leaf',
+            }
+        }
+    }
+)
+
+```
+
+<details>
+
+<summary>HTML `TreeView` output</summary>
+
+```html
+<div>
+  <h4>
+    Tree-view example:
+  </h4>
+  <div style="margin-left:0px">
+    <div>
+      top :
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        leaf : leaf
+      </div>
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        node-1 :
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          leaf-1 : node-1/leaf-1
+        </div>
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          leaf-2 : node-1/leaf-2
+        </div>
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          sub_node :
+        </div>
+        <div style="margin-left:12px">
+          <div>
+            leaf-1 : node-1/sub_node/leaf-1
+          </div>
+        </div>
+        <div style="margin-left:12px">
+          <div>
+            leaf-2 : node-1/sub_node/leaf-2
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-left:4px">
+      <div>
+        node-2 :
+      </div>
+      <div style="margin-left:8px">
+        <div>
+          leaf : node-2/leaf
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+</details>
+
 ### Typical `Slot` use case
 One of the most common uses for `Slots` that demonstrates the power of combining `Slots` and `Components` is a typical `Page`. As we will be usng any number of `Pages` in our app lets define a simple re-useable, configurable `HTMLPage` componenet.
 
@@ -264,240 +608,16 @@ class HTMLPage(Component):
 By utilizing `Slots` in our components we immediatley have a components that provides all the sections that each of our pages will have. 
 Including this component now in any template will render the default values of the `Slot's`
 
-### Better IDE Support
-Defining component attributes via `props` is suitable in most cases.
-For more complex cases however, we can use `__init__` and `SlotsEnum`
-
-```python
-from upytl import Component, UPYTL, html as h, Slot, SlotsEnum
-
-class Notify(Component):
-
-    # by typing `Notify.S.` we can get which slots component has
-    class S(SlotsEnum):
-        title = ()
-        default = ()
-
-    def __init__(self, status='info', **kw):
-        '''This component is rendered as `<div class='notification-{status}>`
-        Args:
-            status: info | warning | error
-        '''
-        super().__init__(status=status, **kw)
-
-    template = {
-        h.Div(Class='notification-{status}'): {
-            h.Div(Class='title'): {
-                S.title.slot(): 'Notification',
-            },
-            S.default.slot(): 'If you see this, please open an issue',
-        }
-    }
-
+```
 t = {
-    # By default, content passed to the component goes into the `default` slot (if there is one)
-    Notify(): 'All good',
-
-    # If the component has more than one slot, we should specify the slot we wish to insert our content into.
-    Notify(status='error'): {
-        Notify.S.title(): 'Error',
-        Notify.S.default(): 'Something went wrong!'
-    }
-}
-```
-
-```HTML
-<div class="notification-info">
-  <div class="title">
-    Notification
-  </div>
-  All good
-</div>
-<div class="notification-error">
-  <div class="title">
-    Error
-  </div>
-  Something went wrong!
-</div>
-```
-
-## Component Context Helper - get_context()
-Occasionally it is necessary for more complex `logic` at the component level than tha standard `For If, Eleif, Else ...`. For these situations UPYYTL has a convenience method that allows us to perform complex functions using standard `python` fucntions or even using functionality from imported external libraries. In fact the `For If, Eleif, Else ...` logic needed by the component could be moved completely into the `get_context method` with the same result.
-
-```Python
-from upytl import Component, UPYTL, html as h
-
-class Notify(Component):
-    props = {
-        'note': 'If you see this, please open an issue',
-        'status': 'info',
-        'notification : ''
-    }
-
-    template = {
-        h.Div(Class='notification-{status}'): '[[ notification ]]'
+    HTMLPage(): {
+        
     }
     
-    def get_context(self, rprops):
-        if rprops['status'] == 'error':
-            notification = rprops['note'].upper()
-        else:
-            notification = rprops['note']
-        
-        return{ **rprops, 'notification':notification }
-
-
-t = {
-    Notify(): None,
-    Notify(note='Today is Monday :('): None,
-    Notify(note='Something went wrong!', status='error'): None,
 }
-````
-
-```HTML
-<div class="notification-info">
-  If you see this, please open an issue
-</div>
-<div class="notification-info">
-  Today is Monday :(
-</div>
-<div class="notification-error">
-  SOMETHING WENT WRONG!
-</div>
 ```
 
-## The Template Factory - template_factory()
-The `template_factory` is another convenience method which allows recursive use of the same component in a template. In order to demonstrate this letst create a simple component 
 
-```python
-class TreeView(Component):
-    """
-    This component demonstrates the use of the `template_factory` method
-    which allows recursive use of a single component in its template.
-    """
-    props = dict(
-        tree=[],
-        depth=0
-    )
-
-    @staticmethod
-    def template_factory(cls):
-        TreeView = cls
-        return {
-            h.Div(For='it in tree', Style={'margin-left': {'f"{depth * 4}px"'} }): {
-                h.Div(): '[[ it["name"] ]]',
-                TreeView(If='"nodes" in it', depth={'depth+1'}, tree={'it["nodes"]'}): ''
-            },
-        }
-```
-Now lets use it in a simple template
-```python
-t = {
-    h.Div():{
-        h.H4():'Tree-view example:',
-        TreeView(tree={'tree'}):{}
-    }
-}
-
-## Set up our `Context` with the values to render
-
-# Define context
-
-def URL():
-    return 'https://github.com/valq7711/upytl'
-
-# Keep in mind, that context (ctx) passed to render upytl.render
-# is inaccessible in custom components, since components are similar to imported functions
-# and component props and slots are similar to function arguments.
-# So there is an optional `global_ctx` argument, which can be passed to UPYTL
-# to provide access to desired stuff from anywhere including custom components
-
-upytl = UPYTL(global_ctx=dict(URL=URL))
-
-ctx = dict(
-    tree=[
-        {
-            'name': 'Top',
-            'nodes': [
-                {'name': 'child-1'},
-                {
-                    'name': 'child-2',
-                    'nodes': [
-                        {'name': '2-child-1'},
-                        {'name': '2-child-2'},
-                        {
-                            'name': '2-child-3',
-                            'nodes': [
-                                {'name': '2-child-3/#1'},
-                                {'name': '2-child-3/#2'},
-                            ]
-                        },
-                    ]
-                },
-                {'name': 'child-3'},
-            ]
-        },
-    ]
-)
-
-rendered = upytl.render(tree, ctx, indent=2)
-
-print(rendered)
-```
-
-```HTML
-<!DOCTYPE html>
-<div>
-  <h4>
-    Tree-view example:
-  </h4>
-  <div style="margin-left:0px">
-    <div>
-      Top
-    </div>
-    <div style="margin-left:4px">
-      <div>
-        child-1
-      </div>
-    </div>
-    <div style="margin-left:4px">
-      <div>
-        child-2
-      </div>
-      <div style="margin-left:8px">
-        <div>
-          2-child-1
-        </div>
-      </div>
-      <div style="margin-left:8px">
-        <div>
-          2-child-2
-        </div>
-      </div>
-      <div style="margin-left:8px">
-        <div>
-          2-child-3
-        </div>
-        <div style="margin-left:12px">
-          <div>
-            2-child-3/#1
-          </div>
-        </div>
-        <div style="margin-left:12px">
-          <div>
-            2-child-3/#2
-          </div>
-        </div>
-      </div>
-    </div>
-    <div style="margin-left:4px">
-      <div>
-        child-3
-      </div>
-    </div>
-  </div>
-</div>
-```
 
 ## The Script Tag
 Including `JS` or `Jquery` functionality in our components is facilitated by the use of the `h.Script` tag.
