@@ -1,0 +1,46 @@
+[project]
+name = "upytl"
+description = "UPYTL - Ultra Pythonic Template Language"
+requires-python = ">=3.7"
+license = {file = "LICENSE"}
+keywords = ["python", "webapplication", "html", "template"]
+authors = [
+  { name="Valery Kucherov", email="valq7711@gmail.com" },
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup :: HTML",
+]
+
+dynamic = ["version"]
+
+[project.urls]
+homepage = "https://github.com/valq7711/upytl"
+repository = "https://github.com/valq7711/upytl"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include= ["upytl", "upytl.*"]
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = {attr = "upytl.__version__"}

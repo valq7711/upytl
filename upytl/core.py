@@ -2,7 +2,7 @@ import io
 import re
 import functools
 from enum import Enum
-from types import SimpleNamespace, CodeType, FunctionType
+from types import SimpleNamespace, CodeType
 import inspect
 import threading
 
