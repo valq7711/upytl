@@ -554,7 +554,12 @@ class SlotTemplateFactory:
 
 
 class SlotsEnum(Enum):
-    def __init__(self):
+    def __new__(cls, *args):
+        obj = object.__new__(cls)
+        obj._value_ = object()  # unique sentinel prevents member aliasing on Python 3.13+
+        return obj
+
+    def __init__(self, *args):
         self._value_ = SlotTemplateFactory(self.name)
 
     def slot(self, **kw) -> Slot:
