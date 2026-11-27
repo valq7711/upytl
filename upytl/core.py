@@ -554,7 +554,14 @@ class SlotTemplateFactory:
 
 
 class SlotsEnum(Enum):
-    def __init__(self):
+    def __new__(cls, *args):
+        # A unique placeholder value per member: on Python 3.13+ members declared
+        # with equal values (`= ()`) would otherwise be aliased to the first one.
+        obj = object.__new__(cls)
+        obj._value_ = object()
+        return obj
+
+    def __init__(self, *args):
         self._value_ = SlotTemplateFactory(self.name)
 
     def slot(self, **kw) -> Slot:
